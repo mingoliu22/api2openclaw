@@ -1,0 +1,123 @@
+# api2openclaw 配置文件
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 30s
+  shutdown_timeout: 10s
+  base_path: "/v1"
+
+auth:
+  enabled: true
+  store_type: "postgres"  # postgres | redis | memory
+  database:
+    host: "localhost"
+    port: 5432
+    user: "api2openclaw"
+    password: "api2openclaw123"
+    database: "api2openclaw"
+    sslmode: "disable"
+  default_quota:
+    requests_per_day: 1000
+    tokens_per_month: 1000000
+
+router:
+  backends:
+    - id: "deepseek-primary"
+      name: "DeepSeek Primary"
+      type: "openai-compatible"
+      base_url: "http://localhost:8000/v1"
+      api_key: ""
+      weight: 10  # 权重，用于加权轮询策略，默认为 1
+      health_check:
+        enabled: true
+        interval: 30s
+        endpoint: "/models"
+        timeout: 5s
+    - id: "deepseek-secondary"
+      name: "DeepSeek Secondary"
+      type: "openai-compatible"
+      base_url: "http://localhost:8001/v1"
+      api_key: ""
+      weight: 5   # 较低权重
+      health_check:
+        enabled: true
+        interval: 30s
+        endpoint: "/models"
+        timeout: 5s
+
+  models:
+    - name: "deepseek-chat"
+      backend_group: ["deepseek-primary", "deepseek-secondary"]
+      routing_strategy: "weighted-round-robin"  # 使用加权轮询策略
+
+  # 模型别名配置
+  aliases:
+    - alias: "gpt-4"           # OpenAI 兼容别名
+      target: "deepseek-chat"  # 实际模型
+    - alias: "gpt-3.5-turbo"
+      target: "deepseek-chat"
+      backends: ["deepseek-primary"]  # 可选：限制使用特定后端
+      strategy: "direct"               # 可选：覆盖路由策略
+
+
+converter:
+  input_format: "deepseek"  # deepseek | openai-json
+  output_format: "openclaw"  # openclaw | json
+  templates:
+    message: "%s"
+    stream_chunk: "%s"
+
+monitor:
+  enabled: true
+  metrics:
+    enabled: true
+    retention_days: 90
+  rate_limiting:
+    storage: "memory"  # memory | redis
+  circuit_breaker:
+    enabled: true
+    error_rate_threshold: 0.5
+    consecutive_errors: 10
+    recovery_timeout: 60s
+    half_open_max_attempts: 3
+  prometheus:
+    enabled: true
+    listen_address: ":9090"
+    metrics_path: "/metrics"
+
+logging:
+  level: "info"  # debug | info | warn | error
+  format: "json"  # json | text
+  output: "stdout"  # stdout | /var/log/api2openclaw/app.log
+
+hot_reload:
+  enabled: true   # 启用配置文件热重载
+  interval: 1s    # 文件检查间隔
+  debounce: 500ms # 防抖延迟
+
+# TLS 配置
+tls:
+  enabled: false              # 是否启用 TLS/HTTPS
+  cert_file: ""               # 证书文件路径
+  key_file: ""                # 私钥文件路径
+  auto_cert: false            # 自动获取证书（Let's Encrypt）
+  cert_dir: "./certs"         # 证书存储目录
+  host_whitelist:             # 自动证书的主机白名单
+    - "api.example.com"
+    - "localhost"
+  min_version: "1.2"          # 最低 TLS 版本
+  cipher_suites:              # 密码套件（可选）
+    - "TLS_AES_128_GCM_SHA256"
+    - "TLS_AES_256_GCM_SHA384"
+    - "TLS_CHACHA20_POLY1305_SHA256"
+  client_auth: false          # 是否启用客户端认证
+  client_ca_file: ""          # 客户端 CA 证书文件
+
+# HSTS 配置
+hsts:
+  enabled: true               # 是否启用 HSTS
+  max_age: 31536000           # HSTS 最大时间（秒），默认 1 年
+  include_sub_domains: true   # 是否包含子域名
+  preload: false              # 是否允许预加载

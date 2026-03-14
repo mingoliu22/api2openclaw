@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:16-alpine
+    container_name: api2openclaw-postgres
+    environment:
+      POSTGRES_USER: api2openclaw
+      POSTGRES_PASSWORD: api2openclaw123
+      POSTGRES_DB: api2openclaw
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U api2openclaw"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - api2openclaw-network
+
+  # api2openclaw 主服务
+  api2openclaw:
+    build:
+      context: ..
+      dockerfile: deployments/docker/Dockerfile
+    container_name: api2openclaw
+    ports:
+      - "8080:8080"   # API 端口
+      - "9090:9090"   # Prometheus 指标端口
+    environment:
+      # 可以通过环境变量覆盖配置
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../configs:/app/configs:ro
+      - api2openclaw_logs:/var/log/api2openclaw
+    restart: unless-stopped
+    networks:
+      - api2openclaw-network
+
+  # Prometheus（可选）
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: api2openclaw-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - api2openclaw-network
+    profiles:
+      - monitoring
+
+  # Grafana（可选）
+  grafana:
+    image: grafana/grafana:latest
+    container_name: api2openclaw-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - api2openclaw-network
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:
+    driver: local
+  api2openclaw_logs:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  api2openclaw-network:
+    driver: bridge

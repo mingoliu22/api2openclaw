@@ -1,0 +1,38 @@
+# Prometheus 配置文件
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'api2openclaw'
+    environment: 'production'
+
+# 告警规则文件
+rule_files:
+  # - "alerts/*.yml"
+
+# 抓取配置
+scrape_configs:
+  # api2openclaw 主服务
+  - job_name: 'api2openclaw'
+    static_configs:
+      - targets: ['api2openclaw:9090']
+        labels:
+          service: 'api2openclaw'
+          tier: 'application'
+
+  # Prometheus 自身监控
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          tier: 'monitoring'
+
+  # PostgreSQL Exporter（可选）
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+  #       labels:
+  #         service: 'postgres'
+  #         tier: 'database'
