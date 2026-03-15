@@ -168,4 +168,50 @@ export const usersAPI = {
     api.delete(`/admin/users/${id}`),
 };
 
+// 插件管理 API
+export const pluginsAPI = {
+  list: () =>
+    api.get('/admin/plugins'),
+
+  getBuiltin: () =>
+    api.get('/admin/plugins/builtin'),
+
+  get: (name: string) =>
+    api.get(`/admin/plugins/${name}`),
+
+  upload: (file: File, config: { name?: string; symbol?: string; config?: string }) => {
+    const formData = new FormData();
+    formData.append('plugin', file);
+    if (config.name) formData.append('name', config.name);
+    if (config.symbol) formData.append('symbol', config.symbol);
+    if (config.config) formData.append('config', config.config);
+    return api.post('/admin/plugins', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  enable: (name: string, config?: Record<string, unknown>) =>
+    api.put(`/admin/plugins/${name}/enable`, { config }),
+
+  disable: (name: string) =>
+    api.put(`/admin/plugins/${name}/disable`),
+
+  updateConfig: (name: string, config: Record<string, unknown>) =>
+    api.put(`/admin/plugins/${name}/config`, { config }),
+
+  download: (name: string) =>
+    api.get(`/admin/plugins/${name}/download`, { responseType: 'blob' }),
+
+  getLogs: (name: string) =>
+    api.get(`/admin/plugins/${name}/logs`),
+
+  test: (name: string, data: {
+    input_format: string;
+    output_format: string;
+    test_data: string;
+    config?: Record<string, unknown>;
+  }) =>
+    api.post(`/admin/plugins/${name}/test`, data),
+};
+
 export default api;

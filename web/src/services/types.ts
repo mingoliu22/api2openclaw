@@ -172,3 +172,29 @@ export interface Claims {
   username: string;
   role: UserRole;
 }
+
+// 插件相关类型
+export interface Plugin {
+  name: string;
+  type: 'builtin' | 'so';
+  path?: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  version?: string;
+}
+
+export interface BuiltinPlugin {
+  name: string;
+  type: 'builtin';
+  description: string;
+  version: string;
+  author: string;
+  input_formats: string[];
+  output_formats: string[];
+}
+
+export interface PluginTestResult {
+  success: boolean;
+  output?: string;
+  error?: string;
+}

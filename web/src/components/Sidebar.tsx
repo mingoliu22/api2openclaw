@@ -13,6 +13,7 @@ const navItems: NavItem[] = [
   { path: '/dashboard/keys', label: 'API Keys', icon: '🔑' },
   { path: '/dashboard/logs', label: '调用日志', icon: '📋' },
   { path: '/dashboard/users', label: '用户管理', icon: '👥' },
+  { path: '/dashboard/plugins', label: '插件市场', icon: '🧩' },
 ];
 
 export default function Sidebar() {

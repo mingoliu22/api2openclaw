@@ -18,6 +18,7 @@ type APIHandlers struct {
 	requestLogStore  RequestLogStore
 	reloadWatcher    *ReloadWatcher
 	authHandler      *Handler
+	pluginHandlers   *PluginHandlers
 }
 
 // NewAPIHandlers 创建 API 处理器
@@ -39,6 +40,11 @@ func NewAPIHandlers(
 // SetReloadWatcher 设置配置重载监听器
 func (h *APIHandlers) SetReloadWatcher(watcher *ReloadWatcher) {
 	h.reloadWatcher = watcher
+}
+
+// SetPluginHandlers 设置插件管理器
+func (h *APIHandlers) SetPluginHandlers(handlers *PluginHandlers) {
+	h.pluginHandlers = handlers
 }
 
 // notifyModelChanged 通知模型配置变更
@@ -95,6 +101,24 @@ func (h *APIHandlers) RegisterRoutes(r *gin.RouterGroup) {
 		admin.GET("/usage", h.GetUsage)
 		admin.GET("/logs", h.GetLogs)
 		admin.GET("/logs/export", h.ExportLogs)
+
+		// 插件管理（需要管理员权限）
+		if h.pluginHandlers != nil {
+			plugins := admin.Group("/plugins")
+			plugins.Use(RequirePermissionMiddleware(h.authService.jwtManager, "plugins.read"))
+			{
+				plugins.GET("", h.ListPlugins)
+				plugins.GET("/builtin", h.ListBuiltinPlugins)
+				plugins.GET("/:name", h.GetPlugin)
+				plugins.POST("", RequirePermissionMiddleware(h.authService.jwtManager, "plugins.write"), h.UploadPlugin)
+				plugins.PUT("/:name/enable", RequirePermissionMiddleware(h.authService.jwtManager, "plugins.write"), h.EnablePlugin)
+				plugins.PUT("/:name/disable", RequirePermissionMiddleware(h.authService.jwtManager, "plugins.write"), h.DisablePlugin)
+				plugins.PUT("/:name/config", RequirePermissionMiddleware(h.authService.jwtManager, "plugins.write"), h.UpdatePluginConfig)
+				plugins.GET("/:name/download", h.DownloadPlugin)
+				plugins.GET("/:name/logs", h.GetPluginLogs)
+				plugins.POST("/:name/test", h.TestPlugin)
+			}
+		}
 
 		// 系统状态
 		admin.GET("/health", h.GetHealth)
@@ -668,4 +692,96 @@ func (h *APIHandlers) DeleteUser(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// --- 插件管理处理函数 ---
+
+// ListPlugins 列出所有插件
+func (h *APIHandlers) ListPlugins(c *gin.Context) {
+	if h.pluginHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Plugin service not available"})
+		return
+	}
+	h.pluginHandlers.ListPlugins(c)
+}
+
+// ListBuiltinPlugins 列出内置插件
+func (h *APIHandlers) ListBuiltinPlugins(c *gin.Context) {
+	if h.pluginHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Plugin service not available"})
+		return
+	}
+	h.pluginHandlers.ListBuiltinPlugins(c)
+}
+
+// GetPlugin 获取插件详情
+func (h *APIHandlers) GetPlugin(c *gin.Context) {
+	if h.pluginHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Plugin service not available"})
+		return
+	}
+	h.pluginHandlers.GetPlugin(c)
+}
+
+// UploadPlugin 上传插件
+func (h *APIHandlers) UploadPlugin(c *gin.Context) {
+	if h.pluginHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Plugin service not available"})
+		return
+	}
+	h.pluginHandlers.UploadPlugin(c)
+}
+
+// EnablePlugin 启用插件
+func (h *APIHandlers) EnablePlugin(c *gin.Context) {
+	if h.pluginHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Plugin service not available"})
+		return
+	}
+	h.pluginHandlers.EnablePlugin(c)
+}
+
+// DisablePlugin 禁用插件
+func (h *APIHandlers) DisablePlugin(c *gin.Context) {
+	if h.pluginHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Plugin service not available"})
+		return
+	}
+	h.pluginHandlers.DisablePlugin(c)
+}
+
+// UpdatePluginConfig 更新插件配置
+func (h *APIHandlers) UpdatePluginConfig(c *gin.Context) {
+	if h.pluginHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Plugin service not available"})
+		return
+	}
+	h.pluginHandlers.UpdatePluginConfig(c)
+}
+
+// DownloadPlugin 下载插件文件
+func (h *APIHandlers) DownloadPlugin(c *gin.Context) {
+	if h.pluginHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Plugin service not available"})
+		return
+	}
+	h.pluginHandlers.DownloadPlugin(c)
+}
+
+// GetPluginLogs 获取插件日志
+func (h *APIHandlers) GetPluginLogs(c *gin.Context) {
+	if h.pluginHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Plugin service not available"})
+		return
+	}
+	h.pluginHandlers.GetPluginLogs(c)
+}
+
+// TestPlugin 测试插件
+func (h *APIHandlers) TestPlugin(c *gin.Context) {
+	if h.pluginHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Plugin service not available"})
+		return
+	}
+	h.pluginHandlers.TestPlugin(c)
 }

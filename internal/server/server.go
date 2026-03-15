@@ -219,6 +219,12 @@ func New(cfg *config.Config, configPath string) (*Server, error) {
 		// 创建 API 处理器
 		adminAPIHandlers = admin.NewAPIHandlers(adminAuthService, adminModelService, adminAPIKeyService, requestLogStore)
 
+		// 初始化插件管理器
+		pluginManager := converter.NewPluginManager()
+		pluginDir := getEnvOrDefault("PLUGIN_DIR", "./plugins")
+		pluginHandlers := admin.NewPluginHandlers(pluginManager, pluginDir)
+		adminAPIHandlers.SetPluginHandlers(pluginHandlers)
+
 		// 创建配置重载监听器
 		reloadWatcher = admin.NewReloadWatcher(sqlxDB)
 	}
