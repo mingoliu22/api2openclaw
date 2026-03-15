@@ -12,10 +12,12 @@ import (
 
 // APIHandlers 管理 API 处理器
 type APIHandlers struct {
-	authService    *AdminAuthService
-	modelService   *ModelService
-	apiKeyService  *APIKeyService
-	authHandler    *Handler
+	authService      *AdminAuthService
+	modelService     *ModelService
+	apiKeyService    *APIKeyService
+	requestLogStore  RequestLogStore
+	reloadWatcher    *ReloadWatcher
+	authHandler      *Handler
 }
 
 // NewAPIHandlers 创建 API 处理器
@@ -23,12 +25,26 @@ func NewAPIHandlers(
 	authService *AdminAuthService,
 	modelService *ModelService,
 	apiKeyService *APIKeyService,
+	requestLogStore RequestLogStore,
 ) *APIHandlers {
 	return &APIHandlers{
-		authService:   authService,
-		modelService:  modelService,
-		apiKeyService: apiKeyService,
-		authHandler:   NewHandler(authService),
+		authService:     authService,
+		modelService:    modelService,
+		apiKeyService:   apiKeyService,
+		requestLogStore: requestLogStore,
+		authHandler:     NewHandler(authService),
+	}
+}
+
+// SetReloadWatcher 设置配置重载监听器
+func (h *APIHandlers) SetReloadWatcher(watcher *ReloadWatcher) {
+	h.reloadWatcher = watcher
+}
+
+// notifyModelChanged 通知模型配置变更
+func (h *APIHandlers) notifyModelChanged() {
+	if h.reloadWatcher != nil {
+		h.reloadWatcher.NotifyModelsChanged()
 	}
 }
 
@@ -117,6 +133,9 @@ func (h *APIHandlers) CreateModel(c *gin.Context) {
 		return
 	}
 
+	// 通知模型配置变更
+	h.notifyModelChanged()
+
 	c.JSON(http.StatusCreated, gin.H{
 		"data": model,
 		"message": "模型配置已保存并生效",
@@ -139,6 +158,9 @@ func (h *APIHandlers) UpdateModel(c *gin.Context) {
 		return
 	}
 
+	// 通知模型配置变更
+	h.notifyModelChanged()
+
 	c.JSON(http.StatusOK, gin.H{
 		"data": model,
 		"message": "模型配置已更新并生效",
@@ -155,6 +177,9 @@ func (h *APIHandlers) DeleteModel(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// 通知模型配置变更
+	h.notifyModelChanged()
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "模型已删除",
@@ -194,6 +219,9 @@ func (h *APIHandlers) ToggleModel(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// 通知模型配置变更
+	h.notifyModelChanged()
 
 	status := "已禁用"
 	if isActive {
@@ -275,28 +303,64 @@ func (h *APIHandlers) GetAPIKey(c *gin.Context) {
 
 // GetAPIKeyUsage 获取 API Key 使用统计
 func (h *APIHandlers) GetAPIKeyUsage(c *gin.Context) {
-	// TODO: 实现使用统计查询
-	_ = c.Param("id") // 未来用于查询指定 key 的使用统计
+	keyID := c.Param("id")
+
+	if h.requestLogStore == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "log service not available"})
+		return
+	}
+
+	stats, err := h.requestLogStore.GetKeyUsageStats(c.Request.Context(), keyID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"total_requests":   0,
-			"total_tokens":     0,
-			"prompt_tokens":    0,
-			"completion_tokens": 0,
-		},
+		"data": stats,
 	})
 }
 
 // GetUsage 获取用量统计
 func (h *APIHandlers) GetUsage(c *gin.Context) {
-	// TODO: 实现用量统计聚合查询
+	if h.requestLogStore == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "log service not available"})
+		return
+	}
+
+	// 构建筛选条件
+	filter := &UsageStatsFilter{}
+
+	// 按 key_id 筛选
+	if keyID := c.Query("key_id"); keyID != "" {
+		filter.KeyID = &keyID
+	}
+
+	// 按模型别名筛选
+	if modelAlias := c.Query("model_alias"); modelAlias != "" {
+		filter.ModelAlias = &modelAlias
+	}
+
+	// 按时间范围筛选
+	if fromStr := c.Query("from"); fromStr != "" {
+		if from, err := time.Parse(time.RFC3339, fromStr); err == nil {
+			filter.From = &from
+		}
+	}
+	if toStr := c.Query("to"); toStr != "" {
+		if to, err := time.Parse(time.RFC3339, toStr); err == nil {
+			filter.To = &to
+		}
+	}
+
+	stats, err := h.requestLogStore.GetUsageStats(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"data": gin.H{
-			"total_requests":   0,
-			"total_tokens":     0,
-			"active_keys":      0,
-			"active_models":    0,
-		},
+		"data": stats,
 	})
 }
 
@@ -304,13 +368,67 @@ func (h *APIHandlers) GetUsage(c *gin.Context) {
 func (h *APIHandlers) GetLogs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if limit > 100 {
+		limit = 100
+	}
+	if limit < 1 {
+		limit = 50
+	}
+	if page < 1 {
+		page = 1
+	}
 
-	// TODO: 实现日志查询
+	// 构建筛选条件
+	filter := &RequestLogFilter{
+		Limit:  limit,
+		Offset: (page - 1) * limit,
+	}
+
+	// 按 key_id 筛选
+	if keyID := c.Query("key_id"); keyID != "" {
+		filter.KeyID = &keyID
+	}
+
+	// 按模型别名筛选
+	if modelAlias := c.Query("model_alias"); modelAlias != "" {
+		filter.ModelAlias = &modelAlias
+	}
+
+	// 按状态码筛选
+	if statusCodeStr := c.Query("status_code"); statusCodeStr != "" {
+		if statusCode, err := strconv.Atoi(statusCodeStr); err == nil {
+			filter.StatusCode = &statusCode
+		}
+	}
+
+	// 按时间范围筛选
+	if fromStr := c.Query("from"); fromStr != "" {
+		if from, err := time.Parse(time.RFC3339, fromStr); err == nil {
+			filter.From = &from
+		}
+	}
+	if toStr := c.Query("to"); toStr != "" {
+		if to, err := time.Parse(time.RFC3339, toStr); err == nil {
+			filter.To = &to
+		}
+	}
+
+	if h.requestLogStore == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "log service not available"})
+		return
+	}
+
+	logs, total, err := h.requestLogStore.List(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"data":     []interface{}{},
-		"page":     page,
-		"limit":    limit,
-		"total":    0,
+		"data":  logs,
+		"page":  page,
+		"limit": limit,
+		"total": total,
 	})
 }
 
@@ -331,10 +449,79 @@ func (h *APIHandlers) ExportLogs(c *gin.Context) {
 	}
 	writer.Write(headers)
 
-	// TODO: 写入实际数据
+	if h.requestLogStore == nil {
+		// 无数据时只返回表头
+		return
+	}
 
-	// 空行（确保至少有数据）
-	writer.Write([]string{})
+	// 构建筛选条件（与 GetLogs 相同）
+	filter := &RequestLogFilter{
+		Limit: 10000, // 导出时限制最多 10000 条
+	}
+
+	if keyID := c.Query("key_id"); keyID != "" {
+		filter.KeyID = &keyID
+	}
+	if modelAlias := c.Query("model_alias"); modelAlias != "" {
+		filter.ModelAlias = &modelAlias
+	}
+	if statusCodeStr := c.Query("status_code"); statusCodeStr != "" {
+		if statusCode, err := strconv.Atoi(statusCodeStr); err == nil {
+			filter.StatusCode = &statusCode
+		}
+	}
+	if fromStr := c.Query("from"); fromStr != "" {
+		if from, err := time.Parse(time.RFC3339, fromStr); err == nil {
+			filter.From = &from
+		}
+	}
+	if toStr := c.Query("to"); toStr != "" {
+		if to, err := time.Parse(time.RFC3339, toStr); err == nil {
+			filter.To = &to
+		}
+	}
+
+	// 查询日志数据
+	logs, _, err := h.requestLogStore.List(c.Request.Context(), filter)
+	if err != nil {
+		// 出错时至少返回表头
+		return
+	}
+
+	// 写入数据行
+	for _, log := range logs {
+		errorCode := ""
+		if log.ErrorCode != nil {
+			errorCode = *log.ErrorCode
+		}
+		modelActual := ""
+		if log.ModelActual != nil {
+			modelActual = *log.ModelActual
+		}
+		requestID := ""
+		if log.RequestID != nil {
+			requestID = *log.RequestID
+		}
+		ipAddress := ""
+		if log.IPAddress != nil {
+			ipAddress = *log.IPAddress
+		}
+
+		row := []string{
+			log.CreatedAt.Format(time.RFC3339),
+			log.ModelAlias,
+			modelActual,
+			strconv.Itoa(log.PromptTokens),
+			strconv.Itoa(log.CompletionTokens),
+			strconv.Itoa(log.TotalTokens),
+			strconv.Itoa(log.LatencyMs),
+			strconv.Itoa(log.StatusCode),
+			errorCode,
+			requestID,
+			ipAddress,
+		}
+		writer.Write(row)
+	}
 }
 
 // GetHealth 获取系统健康状态

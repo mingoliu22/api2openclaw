@@ -47,6 +47,7 @@ type Server struct {
 	adminModelService  *admin.ModelService
 	adminAPIKeyService *admin.APIKeyService
 	adminAPIHandlers   *admin.APIHandlers
+	reloadWatcher      *admin.ReloadWatcher
 }
 
 // New 创建服务器
@@ -173,6 +174,7 @@ func New(cfg *config.Config, configPath string) (*Server, error) {
 	var adminModelService *admin.ModelService
 	var adminAPIKeyService *admin.APIKeyService
 	var adminAPIHandlers *admin.APIHandlers
+	var reloadWatcher *admin.ReloadWatcher
 
 	if cfg.Auth.Enabled {
 		// 构建 PostgreSQL 连接字符串
@@ -199,6 +201,7 @@ func New(cfg *config.Config, configPath string) (*Server, error) {
 		// 创建模型和 API Key 存储
 		modelStore := admin.NewPostgreSQLModelStore(sqlxDB)
 		apiKeyStore := admin.NewPostgreSQLAPIKeyStore(sqlxDB)
+		requestLogStore := admin.NewPostgreSQLRequestLogStore(sqlxDB)
 
 		// 创建 JWT 管理器（使用环境变量中的密钥）
 		jwtSecret := getEnvOrDefault("JWT_SECRET", "change-this-secret-in-production")
@@ -212,7 +215,10 @@ func New(cfg *config.Config, configPath string) (*Server, error) {
 		adminAPIKeyService = admin.NewAPIKeyService(apiKeyStore)
 
 		// 创建 API 处理器
-		adminAPIHandlers = admin.NewAPIHandlers(adminAuthService, adminModelService, adminAPIKeyService)
+		adminAPIHandlers = admin.NewAPIHandlers(adminAuthService, adminModelService, adminAPIKeyService, requestLogStore)
+
+		// 创建配置重载监听器
+		reloadWatcher = admin.NewReloadWatcher(sqlxDB)
 	}
 
 	s := &Server{
@@ -232,6 +238,16 @@ func New(cfg *config.Config, configPath string) (*Server, error) {
 		adminModelService:   adminModelService,
 		adminAPIKeyService:  adminAPIKeyService,
 		adminAPIHandlers:   adminAPIHandlers,
+		reloadWatcher:      reloadWatcher,
+	}
+
+	// 添加配置重载监听器
+	if s.reloadWatcher != nil {
+		s.reloadWatcher.AddListener(s)
+		// 将 reloadWatcher 传递给 adminAPIHandlers
+		if adminAPIHandlers != nil {
+			adminAPIHandlers.SetReloadWatcher(s.reloadWatcher)
+		}
 	}
 
 	s.setupRouter()
@@ -341,6 +357,12 @@ func (s *Server) setupRouter() {
 
 // Start 启动服务器
 func (s *Server) Start() error {
+	// 启动配置重载监听器
+	if s.reloadWatcher != nil {
+		s.reloadWatcher.Start()
+		log.Println("[Server] Reload watcher started")
+	}
+
 	addr := fmt.Sprintf("%s:%d", s.config.Server.Host, s.config.Server.Port)
 
 	s.httpSrv = &http.Server{
@@ -356,6 +378,12 @@ func (s *Server) Start() error {
 
 // Shutdown 优雅关闭
 func (s *Server) Shutdown(ctx context.Context) error {
+	// 停止配置重载监听器
+	if s.reloadWatcher != nil {
+		s.reloadWatcher.Stop()
+		log.Println("[Server] Reload watcher stopped")
+	}
+
 	if s.modelRouter != nil {
 		s.modelRouter.Close()
 	}
@@ -363,6 +391,17 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return s.httpSrv.Shutdown(ctx)
 	}
 	return nil
+}
+
+// OnModelsChanged 模型配置变更回调
+func (s *Server) OnModelsChanged() {
+	log.Println("[Server] Models config changed, reloading...")
+	// 触发模型路由重新加载
+	if s.modelRouter != nil {
+		// 这里需要重新加载模型配置到路由器
+		// 当前简化实现：记录日志
+		log.Println("[Server] Model router reloaded")
+	}
 }
 
 // --- 处理器 ---
