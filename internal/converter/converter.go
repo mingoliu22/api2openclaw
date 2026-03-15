@@ -17,7 +17,7 @@ type Converter interface {
 
 // ConverterConfig 转换器配置
 type ConverterConfig struct {
-	// InputFormat 输入格式: deepseek, openai-json
+	// InputFormat 输入格式: deepseek, openai-json, openai-multimodal
 	InputFormat string `yaml:"input_format"`
 
 	// OutputFormat 输出格式: openclaw, json
@@ -28,6 +28,9 @@ type ConverterConfig struct {
 
 	// IncludeUsage 是否包含使用量信息
 	IncludeUsage bool `yaml:"include_usage"`
+
+	// EnableMultimodal 是否启用多模态支持
+	EnableMultimodal bool `yaml:"enable_multimodal"`
 }
 
 // TemplatesConfig 模板配置
@@ -41,11 +44,18 @@ type TemplatesConfig struct {
 
 // NewConverter 创建转换器
 func NewConverter(config *ConverterConfig) (Converter, error) {
+	// 如果启用多模态支持，使用多模态转换器
+	if config.EnableMultimodal {
+		return NewMultimodalConverter(config), nil
+	}
+
 	switch config.InputFormat {
 	case "deepseek":
 		return NewDeepSeekConverter(config), nil
 	case "openai-json":
 		return NewOpenAIConverter(config), nil
+	case "openai-multimodal":
+		return NewMultimodalConverter(config), nil
 	default:
 		return NewDeepSeekConverter(config), nil // 默认使用 DeepSeek
 	}

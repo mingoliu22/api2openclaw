@@ -19,6 +19,7 @@ type APIHandlers struct {
 	reloadWatcher    *ReloadWatcher
 	authHandler      *Handler
 	pluginHandlers   *PluginHandlers
+	billingHandlers  *BillingHandlers
 }
 
 // NewAPIHandlers 创建 API 处理器
@@ -45,6 +46,11 @@ func (h *APIHandlers) SetReloadWatcher(watcher *ReloadWatcher) {
 // SetPluginHandlers 设置插件管理器
 func (h *APIHandlers) SetPluginHandlers(handlers *PluginHandlers) {
 	h.pluginHandlers = handlers
+}
+
+// SetBillingHandlers 设置计费处理器
+func (h *APIHandlers) SetBillingHandlers(handlers *BillingHandlers) {
+	h.billingHandlers = handlers
 }
 
 // notifyModelChanged 通知模型配置变更
@@ -117,6 +123,34 @@ func (h *APIHandlers) RegisterRoutes(r *gin.RouterGroup) {
 				plugins.GET("/:name/download", h.DownloadPlugin)
 				plugins.GET("/:name/logs", h.GetPluginLogs)
 				plugins.POST("/:name/test", h.TestPlugin)
+			}
+		}
+
+		// 计费管理（需要管理员权限）
+		if h.billingHandlers != nil {
+			billing := admin.Group("/billing")
+			billing.Use(RequirePermissionMiddleware(h.authService.jwtManager, "billing.read"))
+			{
+				// 用量查询
+				billing.GET("/usage", h.GetBillingUsage)
+
+				// 计费规则管理
+				billing.GET("/rules", h.ListBillingRules)
+				billing.GET("/rules/:id", h.GetBillingRule)
+				billing.POST("/rules", RequirePermissionMiddleware(h.authService.jwtManager, "billing.write"), h.CreateBillingRule)
+				billing.PUT("/rules/:id", RequirePermissionMiddleware(h.authService.jwtManager, "billing.write"), h.UpdateBillingRule)
+				billing.DELETE("/rules/:id", RequirePermissionMiddleware(h.authService.jwtManager, "billing.write"), h.DeleteBillingRule)
+
+				// 账单管理
+				billing.GET("/invoices", h.ListInvoices)
+				billing.GET("/invoices/export", h.StreamInvoicesCSV)
+				billing.POST("/invoices/generate", RequirePermissionMiddleware(h.authService.jwtManager, "billing.write"), h.GenerateInvoice)
+				billing.GET("/invoices/:id", h.GetInvoice)
+				billing.GET("/invoices/:id/export", h.ExportInvoice)
+				billing.PUT("/invoices/:id/status", RequirePermissionMiddleware(h.authService.jwtManager, "billing.write"), h.UpdateInvoiceStatus)
+
+				// 付款管理
+				billing.POST("/invoices/:id/payments", RequirePermissionMiddleware(h.authService.jwtManager, "billing.write"), h.CreatePayment)
 			}
 		}
 
@@ -784,4 +818,123 @@ func (h *APIHandlers) TestPlugin(c *gin.Context) {
 		return
 	}
 	h.pluginHandlers.TestPlugin(c)
+}
+
+// --- 计费管理处理函数 ---
+
+// GetBillingUsage 获取计费用量统计
+func (h *APIHandlers) GetBillingUsage(c *gin.Context) {
+	if h.billingHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Billing service not available"})
+		return
+	}
+	h.billingHandlers.GetUsageStats(c)
+}
+
+// ListBillingRules 列出计费规则
+func (h *APIHandlers) ListBillingRules(c *gin.Context) {
+	if h.billingHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Billing service not available"})
+		return
+	}
+	h.billingHandlers.ListRules(c)
+}
+
+// GetBillingRule 获取单个计费规则
+func (h *APIHandlers) GetBillingRule(c *gin.Context) {
+	if h.billingHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Billing service not available"})
+		return
+	}
+	h.billingHandlers.GetRule(c)
+}
+
+// CreateBillingRule 创建计费规则
+func (h *APIHandlers) CreateBillingRule(c *gin.Context) {
+	if h.billingHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Billing service not available"})
+		return
+	}
+	h.billingHandlers.CreateRule(c)
+}
+
+// UpdateBillingRule 更新计费规则
+func (h *APIHandlers) UpdateBillingRule(c *gin.Context) {
+	if h.billingHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Billing service not available"})
+		return
+	}
+	h.billingHandlers.UpdateRule(c)
+}
+
+// DeleteBillingRule 删除计费规则
+func (h *APIHandlers) DeleteBillingRule(c *gin.Context) {
+	if h.billingHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Billing service not available"})
+		return
+	}
+	h.billingHandlers.DeleteRule(c)
+}
+
+// ListInvoices 列出账单
+func (h *APIHandlers) ListInvoices(c *gin.Context) {
+	if h.billingHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Billing service not available"})
+		return
+	}
+	h.billingHandlers.ListInvoices(c)
+}
+
+// GetInvoice 获取账单详情
+func (h *APIHandlers) GetInvoice(c *gin.Context) {
+	if h.billingHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Billing service not available"})
+		return
+	}
+	h.billingHandlers.GetInvoice(c)
+}
+
+// GenerateInvoice 生成账单
+func (h *APIHandlers) GenerateInvoice(c *gin.Context) {
+	if h.billingHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Billing service not available"})
+		return
+	}
+	h.billingHandlers.GenerateInvoice(c)
+}
+
+// UpdateInvoiceStatus 更新账单状态
+func (h *APIHandlers) UpdateInvoiceStatus(c *gin.Context) {
+	if h.billingHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Billing service not available"})
+		return
+	}
+	h.billingHandlers.UpdateInvoiceStatus(c)
+}
+
+// CreatePayment 创建付款记录
+func (h *APIHandlers) CreatePayment(c *gin.Context) {
+	if h.billingHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Billing service not available"})
+		return
+	}
+	h.billingHandlers.CreatePayment(c)
+}
+
+// ExportInvoice 导出账单为 CSV
+func (h *APIHandlers) ExportInvoice(c *gin.Context) {
+	if h.billingHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Billing service not available"})
+		return
+	}
+	h.billingHandlers.ExportInvoice(c)
+}
+
+// StreamInvoicesCSV 流式导出账单列表
+func (h *APIHandlers) StreamInvoicesCSV(c *gin.Context) {
+	if h.billingHandlers == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Billing service not available"})
+		return
+	}
+	h.billingHandlers.StreamInvoiceCSV(c)
 }

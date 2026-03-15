@@ -214,4 +214,102 @@ export const pluginsAPI = {
     api.post(`/admin/plugins/${name}/test`, data),
 };
 
+// 计费管理 API
+export const billingAPI = {
+  // 用量统计
+  getUsage: (params: {
+    key_id: string;
+    start_date?: string;
+    end_date?: string;
+  }) =>
+    api.get('/admin/billing/usage', { params }),
+
+  // 计费规则
+  listRules: (activeOnly = false) =>
+    api.get(`/admin/billing/rules?active_only=${activeOnly}`),
+
+  getRule: (id: number) =>
+    api.get(`/admin/billing/rules/${id}`),
+
+  createRule: (data: {
+    name: string;
+    description?: string;
+    rule_type: 'token_based' | 'request_based' | 'tier';
+    model_alias?: string;
+    key_id?: string;
+    unit_price: number;
+    currency: string;
+    free_quota?: number;
+    tier_threshold?: number;
+    tier_price?: number;
+    is_active?: boolean;
+    valid_from: string;
+    valid_until?: string;
+  }) =>
+    api.post('/admin/billing/rules', data),
+
+  updateRule: (id: number, data: {
+    name?: string;
+    description?: string;
+    rule_type?: 'token_based' | 'request_based' | 'tier';
+    model_alias?: string;
+    key_id?: string;
+    unit_price?: number;
+    currency?: string;
+    free_quota?: number;
+    tier_threshold?: number;
+    tier_price?: number;
+    is_active?: boolean;
+    valid_from?: string;
+    valid_until?: string;
+  }) =>
+    api.put(`/admin/billing/rules/${id}`, data),
+
+  deleteRule: (id: number) =>
+    api.delete(`/admin/billing/rules/${id}`),
+
+  // 账单管理
+  listInvoices: (params: {
+    page?: number;
+    limit?: number;
+    key_id?: string;
+    status?: string;
+  }) =>
+    api.get('/admin/billing/invoices', { params }),
+
+  getInvoice: (id: number) =>
+    api.get(`/admin/billing/invoices/${id}`),
+
+  generateInvoice: (data: {
+    key_id: string;
+    start_date: string;
+    end_date: string;
+  }) =>
+    api.post('/admin/billing/invoices/generate', data),
+
+  updateInvoiceStatus: (id: number, status: 'pending' | 'paid' | 'overdue' | 'cancelled') =>
+    api.put(`/admin/billing/invoices/${id}/status`, { status }),
+
+  exportInvoice: (id: number) =>
+    api.get(`/admin/billing/invoices/${id}/export`, { responseType: 'blob' }),
+
+  exportInvoicesCSV: (params?: {
+    key_id?: string;
+    status?: string;
+  }) =>
+    api.get('/admin/billing/invoices/export', {
+      params,
+      responseType: 'blob',
+    }),
+
+  // 付款管理
+  createPayment: (invoiceId: number, data: {
+    amount: number;
+    payment_method: string;
+    payment_reference?: string;
+    notes?: string;
+  }) =>
+    api.post(`/admin/billing/invoices/${invoiceId}/payments`, data),
+};
+
 export default api;

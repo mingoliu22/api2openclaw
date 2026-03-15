@@ -17,6 +17,7 @@ import (
 	"github.com/openclaw/api2openclaw/internal/admin"
 	"github.com/openclaw/api2openclaw/internal/auth"
 	"github.com/openclaw/api2openclaw/internal/audit"
+	"github.com/openclaw/api2openclaw/internal/billing"
 	"github.com/openclaw/api2openclaw/internal/config"
 	"github.com/openclaw/api2openclaw/internal/converter"
 	"github.com/openclaw/api2openclaw/internal/models"
@@ -224,6 +225,12 @@ func New(cfg *config.Config, configPath string) (*Server, error) {
 		pluginDir := getEnvOrDefault("PLUGIN_DIR", "./plugins")
 		pluginHandlers := admin.NewPluginHandlers(pluginManager, pluginDir)
 		adminAPIHandlers.SetPluginHandlers(pluginHandlers)
+
+		// 初始化计费服务
+		billingStore := billing.NewPostgreSQLStore(sqlxDB)
+		billingService := billing.NewBillingService(billingStore)
+		billingHandlers := admin.NewBillingHandlers(billingService)
+		adminAPIHandlers.SetBillingHandlers(billingHandlers)
 
 		// 创建配置重载监听器
 		reloadWatcher = admin.NewReloadWatcher(sqlxDB)

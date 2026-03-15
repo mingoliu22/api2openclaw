@@ -198,3 +198,115 @@ export interface PluginTestResult {
   output?: string;
   error?: string;
 }
+
+// 计费相关类型
+export interface BillingRule {
+  id: number;
+  name: string;
+  description: string;
+  rule_type: 'token_based' | 'request_based' | 'tier';
+  model_alias?: string;
+  key_id?: string;
+  unit_price: number;
+  currency: string;
+  free_quota: number;
+  tier_threshold?: number;
+  tier_price?: number;
+  is_active: boolean;
+  valid_from: string;
+  valid_until?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateBillingRuleRequest {
+  name: string;
+  description?: string;
+  rule_type: 'token_based' | 'request_based' | 'tier';
+  model_alias?: string;
+  key_id?: string;
+  unit_price: number;
+  currency: string;
+  free_quota?: number;
+  tier_threshold?: number;
+  tier_price?: number;
+  is_active?: boolean;
+  valid_from: string;
+  valid_until?: string;
+}
+
+export interface Invoice {
+  id: number;
+  invoice_number: string;
+  key_id?: string;
+  billing_period_start: string;
+  billing_period_end: string;
+  currency: string;
+  subtotal: number;
+  tax: number;
+  discount: number;
+  total: number;
+  status: 'pending' | 'paid' | 'overdue' | 'cancelled';
+  due_date?: string;
+  paid_date?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InvoiceItem {
+  id: number;
+  invoice_id: number;
+  model_alias: string;
+  request_count: number;
+  token_count: number;
+  unit_price: number;
+  tier_applied: boolean;
+  line_total: number;
+  created_at: string;
+}
+
+export interface Payment {
+  id: number;
+  invoice_id: number;
+  amount: number;
+  payment_method: string;
+  payment_reference?: string;
+  status: 'pending' | 'completed' | 'failed' | 'refunded';
+  paid_at?: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface InvoiceDetail {
+  invoice: Invoice;
+  items: InvoiceItem[];
+  payments: Payment[];
+}
+
+export interface GenerateInvoiceRequest {
+  key_id: string;
+  start_date: string;
+  end_date: string;
+}
+
+export interface UsageStats {
+  key_id: string;
+  start_date: string;
+  end_date: string;
+  total_requests: number;
+  total_tokens: number;
+  total_cost: number;
+  cost_by_model: Record<string, {
+    request_count: number;
+    token_count: number;
+    cost: number;
+  }>;
+}
+
+export interface InvoicesResponse {
+  invoices: Invoice[];
+  total: number;
+  page: number;
+  limit: number;
+}

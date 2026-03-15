@@ -56,17 +56,21 @@ var RolePermissions = map[UserRole][]string{
 		"logs.read", "logs.export",
 		"users.read", "users.write",
 		"stats.read",
+		"plugins.read", "plugins.write",
+		"billing.read", "billing.write",
 	},
 	RoleOperator: {
 		"models.read",
 		"keys.read",
 		"logs.read", "logs.export",
 		"stats.read",
+		"billing.read",
 	},
 	RoleViewer: {
 		"models.read",
 		"logs.read",
 		"stats.read",
+		"billing.read",
 	},
 }
 
