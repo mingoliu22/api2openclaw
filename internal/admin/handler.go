@@ -257,3 +257,49 @@ func InitMockAdminSQLite(dbPath string) (*gorm.DB, error) {
 
 	return gormDB, nil
 }
+
+// RequirePermissionMiddleware 权限检查中间件
+func RequirePermissionMiddleware(jwtManager *JWTManager, permission string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 获取 claims（应该已经由 JWTMiddleware 设置）
+		claims, exists := c.Get("admin_claims")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+			c.Abort()
+			return
+		}
+
+		adminClaims, ok := claims.(*Claims)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid claims"})
+			c.Abort()
+			return
+		}
+
+		// 检查权限
+		if !adminClaims.Role.HasPermission(permission) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": fmt.Sprintf("Permission denied: required '%s'", permission),
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// GetClaimsFromContext 从上下文获取 claims
+func GetClaimsFromContext(c *gin.Context) (*Claims, error) {
+	claims, exists := c.Get("admin_claims")
+	if !exists {
+		return nil, fmt.Errorf("claims not found in context")
+	}
+
+	adminClaims, ok := claims.(*Claims)
+	if !ok {
+		return nil, fmt.Errorf("invalid claims type")
+	}
+
+	return adminClaims, nil
+}

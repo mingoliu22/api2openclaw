@@ -64,6 +64,18 @@ func (h *APIHandlers) RegisterRoutes(r *gin.RouterGroup) {
 		// 用户信息
 		admin.GET("/auth/me", h.MeHandler)
 
+		// 用户管理（需要权限）
+		users := admin.Group("/users")
+		users.Use(RequirePermissionMiddleware(h.authService.jwtManager, "users.read"))
+		{
+			users.GET("", h.ListUsers)
+			users.GET("/:id", h.GetUser)
+			// 创建/更新/删除需要更高权限
+			users.POST("", RequirePermissionMiddleware(h.authService.jwtManager, "users.write"), h.CreateUser)
+			users.PUT("/:id", RequirePermissionMiddleware(h.authService.jwtManager, "users.write"), h.UpdateUser)
+			users.DELETE("/:id", RequirePermissionMiddleware(h.authService.jwtManager, "users.write"), h.DeleteUser)
+		}
+
 		// 模型管理
 		admin.GET("/models", h.GetModels)
 		admin.POST("/models", h.CreateModel)
@@ -535,4 +547,125 @@ func (h *APIHandlers) GetHealth(c *gin.Context) {
 		},
 		"models": []interface{}{}, // TODO: 获取实际模型状态
 	})
+}
+
+// --- 用户管理处理函数 ---
+
+// ListUsers 列出用户
+func (h *APIHandlers) ListUsers(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if limit > 100 {
+		limit = 100
+	}
+	if limit < 1 {
+		limit = 20
+	}
+	if page < 1 {
+		page = 1
+	}
+
+	offset := (page - 1) * limit
+	users, total, err := h.authService.ListUsers(c.Request.Context(), limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":  users,
+		"page":  page,
+		"limit": limit,
+		"total": total,
+	})
+}
+
+// GetUser 获取用户详情
+func (h *APIHandlers) GetUser(c *gin.Context) {
+	id := c.Param("id")
+	user, err := h.authService.GetUser(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": user})
+}
+
+// CreateUser 创建用户
+func (h *APIHandlers) CreateUser(c *gin.Context) {
+	var req CreateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 从 JWT 获取当前用户 ID
+	claims, _ := GetClaimsFromContext(c)
+	if claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	user, err := h.authService.CreateUser(c.Request.Context(), &req, claims.UserID)
+	if err != nil {
+		if err == ErrUserExists {
+			c.JSON(http.StatusConflict, gin.H{"error": "Username already exists"})
+			return
+		}
+		if err == ErrInvalidRole {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid role"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"data": user})
+}
+
+// UpdateUser 更新用户
+func (h *APIHandlers) UpdateUser(c *gin.Context) {
+	id := c.Param("id")
+
+	var req UpdateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	user, err := h.authService.UpdateUser(c.Request.Context(), id, &req)
+	if err != nil {
+		if err == ErrUserNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+		if err == ErrInvalidRole {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid role"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": user})
+}
+
+// DeleteUser 删除用户
+func (h *APIHandlers) DeleteUser(c *gin.Context) {
+	id := c.Param("id")
+
+	// 不允许删除自己
+	claims, _ := GetClaimsFromContext(c)
+	if claims != nil && claims.UserID == id {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot delete yourself"})
+		return
+	}
+
+	if err := h.authService.DeleteUser(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
