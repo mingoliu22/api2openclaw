@@ -47,6 +47,7 @@ type Server struct {
 	adminModelService  *admin.ModelService
 	adminAPIKeyService *admin.APIKeyService
 	adminAPIHandlers   *admin.APIHandlers
+	requestLogStore     admin.RequestLogStore
 	reloadWatcher      *admin.ReloadWatcher
 }
 
@@ -174,6 +175,7 @@ func New(cfg *config.Config, configPath string) (*Server, error) {
 	var adminModelService *admin.ModelService
 	var adminAPIKeyService *admin.APIKeyService
 	var adminAPIHandlers *admin.APIHandlers
+	var requestLogStore admin.RequestLogStore
 	var reloadWatcher *admin.ReloadWatcher
 
 	if cfg.Auth.Enabled {
@@ -201,7 +203,7 @@ func New(cfg *config.Config, configPath string) (*Server, error) {
 		// 创建模型和 API Key 存储
 		modelStore := admin.NewPostgreSQLModelStore(sqlxDB)
 		apiKeyStore := admin.NewPostgreSQLAPIKeyStore(sqlxDB)
-		requestLogStore := admin.NewPostgreSQLRequestLogStore(sqlxDB)
+		requestLogStore = admin.NewPostgreSQLRequestLogStore(sqlxDB)
 
 		// 创建 JWT 管理器（使用环境变量中的密钥）
 		jwtSecret := getEnvOrDefault("JWT_SECRET", "change-this-secret-in-production")
@@ -238,6 +240,7 @@ func New(cfg *config.Config, configPath string) (*Server, error) {
 		adminModelService:   adminModelService,
 		adminAPIKeyService:  adminAPIKeyService,
 		adminAPIHandlers:   adminAPIHandlers,
+		requestLogStore:    requestLogStore,
 		reloadWatcher:      reloadWatcher,
 	}
 
@@ -562,6 +565,23 @@ func (s *Server) handleChatCompletions(c *gin.Context) {
 			cb := s.circuitBreaker.Get(backend.ID, monitor.CircuitConfig{})
 			cb.RecordFailure()
 		}
+
+		// 记录失败的请求日志
+		duration := time.Since(startTime)
+		s.logRequestAsync(
+			apiKey.ID,
+			req.Model,
+			backend.ID,
+			0, 0, 0,
+			int(duration.Milliseconds()),
+			500,
+			"backend_error",
+			err.Error(),
+			c.GetHeader("X-Request-ID"),
+			c.ClientIP(),
+			c.GetHeader("User-Agent"),
+		)
+
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{
 			"message": "Backend request failed: " + err.Error(),
 			"type":    "backend_error",
@@ -585,17 +605,44 @@ func (s *Server) handleChatCompletions(c *gin.Context) {
 		_ = s.rateLimiter.Increment(apiKey.ID, limits)
 	}
 
-	// 记录指标
+	// 记录指标和日志
 	duration := time.Since(startTime)
 	if s.promMetrics != nil {
 		s.promMetrics.RecordHTTPRequest("POST", "/chat/completions", 200, duration)
 	}
+
+	// 记录成功的请求日志
+	promptTokens := 0
+	completionTokens := 0
+	totalTokens := 0
+	if resp.Usage != nil {
+		promptTokens = resp.Usage.PromptTokens
+		completionTokens = resp.Usage.CompletionTokens
+		totalTokens = resp.Usage.TotalTokens
+	}
+	s.logRequestAsync(
+		apiKey.ID,
+		req.Model,
+		backend.ID,
+		promptTokens,
+		completionTokens,
+		totalTokens,
+		int(duration.Milliseconds()),
+		200,
+		"",
+		"",
+		c.GetHeader("X-Request-ID"),
+		c.ClientIP(),
+		c.GetHeader("User-Agent"),
+	)
 
 	c.JSON(http.StatusOK, resp)
 }
 
 // handleChatCompletionsStream 流式聊天完成接口
 func (s *Server) handleChatCompletionsStream(c *gin.Context) {
+	startTime := time.Now()
+
 	// 跟踪活跃请求
 	if s.activeTracker != nil {
 		s.activeTracker.Begin()
@@ -706,17 +753,68 @@ func (s *Server) handleChatCompletionsStream(c *gin.Context) {
 	chunkChan, errChan := s.forwarder.ForwardStreamRequest(c.Request.Context(), backend, &req, apiKey.ID)
 
 	// 发送流式数据
+	requestSucceeded := false
+	var streamErr error
+
 	for {
 		select {
 		case <-c.Request.Context().Done():
+			// 客户端断开连接
 			log.Printf("[Chat Stream] Client disconnected")
+			duration := time.Since(startTime)
+			s.logRequestAsync(
+				apiKey.ID,
+				req.Model,
+				backend.ID,
+				0, 0, 0,
+				int(duration.Milliseconds()),
+				499, // Client Closed Request
+				"client_disconnected",
+				"Client disconnected during stream",
+				c.GetHeader("X-Request-ID"),
+				c.ClientIP(),
+				c.GetHeader("User-Agent"),
+			)
 			return
 
 		case chunk, ok := <-chunkChan:
 			if !ok {
+				// 流式传输完成
+				requestSucceeded = true
 				// 发送完成信号
 				fmt.Fprintf(c.Writer, "data: [DONE]\n\n")
 				flusher.Flush()
+
+				// 记录成功的流式请求日志（流式请求通常无法获取准确的 token 数）
+				duration := time.Since(startTime)
+				s.logRequestAsync(
+					apiKey.ID,
+					req.Model,
+					backend.ID,
+					0, 0, 0, // 流式请求的 token 数需要从后端响应中解析，暂时记录 0
+					int(duration.Milliseconds()),
+					200,
+					"",
+					"",
+					c.GetHeader("X-Request-ID"),
+					c.ClientIP(),
+					c.GetHeader("User-Agent"),
+				)
+
+				// 记录成功并增加限流计数
+				if s.circuitBreaker != nil {
+					cb := s.circuitBreaker.Get(backend.ID, monitor.CircuitConfig{})
+					cb.RecordSuccess()
+				}
+				if s.rateLimiter != nil {
+					limits := &models.RateLimit{
+						RequestsPerMinute: apiKey.RequestsPerMinute,
+						RequestsPerHour:   apiKey.RequestsPerHour,
+						RequestsPerDay:    apiKey.RequestsPerDay,
+					}
+					_ = s.rateLimiter.Increment(apiKey.ID, limits)
+				}
+
 				return
 			}
 
@@ -732,7 +830,31 @@ func (s *Server) handleChatCompletionsStream(c *gin.Context) {
 
 		case err := <-errChan:
 			if err != nil {
+				streamErr = err
 				log.Printf("[Chat Stream] Error: %v", err)
+
+				// 记录失败的流式请求日志
+				duration := time.Since(startTime)
+				s.logRequestAsync(
+					apiKey.ID,
+					req.Model,
+					backend.ID,
+					0, 0, 0,
+					int(duration.Milliseconds()),
+					500,
+					"stream_error",
+					err.Error(),
+					c.GetHeader("X-Request-ID"),
+					c.ClientIP(),
+					c.GetHeader("User-Agent"),
+				)
+
+				// 记录熔断器失败
+				if s.circuitBreaker != nil {
+					cb := s.circuitBreaker.Get(backend.ID, monitor.CircuitConfig{})
+					cb.RecordFailure()
+				}
+
 				// 发送错误事件
 				errorData, _ := json.Marshal(gin.H{
 					"error": gin.H{
@@ -1390,4 +1512,51 @@ func (s *Server) handleGetUsageStats(c *gin.Context) {
 	})
 }
 
+// logRequest 异步记录请求日志
+func (s *Server) logRequestAsync(apiKeyID, modelAlias, modelActual string, promptTokens, completionTokens, totalTokens, latencyMs, statusCode int, errorCode, errorMessage, requestID, ipAddress, userAgent string) {
+	if s.requestLogStore == nil {
+		return
+	}
+
+	// 使用 goroutine 异步写入，不阻塞请求响应
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		log := &admin.RequestLog{
+			ID:                generateUUID(),
+			KeyID:             stringPtr(apiKeyID),
+			ModelAlias:        modelAlias,
+			ModelActual:       stringPtr(modelActual),
+			PromptTokens:      promptTokens,
+			CompletionTokens:  completionTokens,
+			TotalTokens:       totalTokens,
+			LatencyMs:         latencyMs,
+			StatusCode:        statusCode,
+			ErrorCode:         stringPtr(errorCode),
+			ErrorMessage:      stringPtr(errorMessage),
+			RequestID:         stringPtr(requestID),
+			IPAddress:         stringPtr(ipAddress),
+			UserAgent:         stringPtr(userAgent),
+			CreatedAt:         time.Now(),
+		}
+
+		if err := s.requestLogStore.Create(ctx, log); err != nil {
+			log.Printf("[Server] Failed to log request: %v", err)
+		}
+	}()
+}
+
+// generateUUID 生成 UUID（简化版，生产环境应使用 github.com/google/uuid）
+func generateUUID() string {
+	return fmt.Sprintf("%d-%s", time.Now().UnixNano(), "req")
+}
+
+// stringPtr 返回字符串指针的辅助函数
+func stringPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
 
