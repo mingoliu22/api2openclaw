@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
+	"github.com/openclaw/api2openclaw/internal/admin"
 	"github.com/openclaw/api2openclaw/internal/auth"
 	"github.com/openclaw/api2openclaw/internal/audit"
 	"github.com/openclaw/api2openclaw/internal/config"
@@ -37,6 +41,12 @@ type Server struct {
 	rateLimiter    *monitor.RateLimiter
 	circuitBreaker *monitor.CircuitBreakerRegistry
 	activeTracker  *monitor.ActiveRequestsTracker
+
+	// 管理控制台组件
+	adminAuthService   *admin.AdminAuthService
+	adminModelService  *admin.ModelService
+	adminAPIKeyService *admin.APIKeyService
+	adminAPIHandlers   *admin.APIHandlers
 }
 
 // New 创建服务器
@@ -158,19 +168,70 @@ func New(cfg *config.Config, configPath string) (*Server, error) {
 		forwarder = router.NewForwarder(cvt, promMetrics)
 	}
 
+	// 初始化管理控制台服务
+	var adminAuthService *admin.AdminAuthService
+	var adminModelService *admin.ModelService
+	var adminAPIKeyService *admin.APIKeyService
+	var adminAPIHandlers *admin.APIHandlers
+
+	if cfg.Auth.Enabled {
+		// 构建 PostgreSQL 连接字符串
+		postgresDSN := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+			cfg.Auth.Database.Host,
+			cfg.Auth.Database.Port,
+			cfg.Auth.Database.User,
+			cfg.Auth.Database.Password,
+			cfg.Auth.Database.Database,
+			cfg.Auth.Database.SSLMode,
+		)
+
+		// 使用 sqlx 创建数据库连接
+		sqlxDB, err := sqlx.Connect("postgres", postgresDSN)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to admin database: %w", err)
+		}
+		sqlxDB.SetMaxOpenConns(25)
+		sqlxDB.SetMaxIdleConns(5)
+
+		// 创建管理员存储
+		adminStore := admin.NewPostgreSQLStore(sqlxDB)
+
+		// 创建模型和 API Key 存储
+		modelStore := admin.NewPostgreSQLModelStore(sqlxDB)
+		apiKeyStore := admin.NewPostgreSQLAPIKeyStore(sqlxDB)
+
+		// 创建 JWT 管理器（使用环境变量中的密钥）
+		jwtSecret := getEnvOrDefault("JWT_SECRET", "change-this-secret-in-production")
+		adminAuthService = admin.NewAdminAuthService(adminStore, jwtSecret)
+
+		// 创建模型服务（使用加密密钥）
+		encryptionKey := getEnvOrDefault("ENCRYPTION_KEY", "32-byte-encryption-key-1234")
+		adminModelService = admin.NewModelService(modelStore, encryptionKey)
+
+		// 创建 API Key 服务
+		adminAPIKeyService = admin.NewAPIKeyService(apiKeyStore)
+
+		// 创建 API 处理器
+		adminAPIHandlers = admin.NewAPIHandlers(adminAuthService, adminModelService, adminAPIKeyService)
+	}
+
 	s := &Server{
-		config:         cfg,
-		configPath:     configPath,
-		authMgr:        authMgr,
-		auditLogger:    auditLogger,
-		converter:      cvt,
-		modelRouter:    modelRouter,
-		forwarder:      forwarder,
-		metrics:        nil, // TODO
-		promMetrics:    promMetrics,
-		rateLimiter:    rateLimiter,
-		circuitBreaker: circuitBreaker,
-		activeTracker:  activeTracker,
+		config:             cfg,
+		configPath:         configPath,
+		authMgr:            authMgr,
+		auditLogger:        auditLogger,
+		converter:          cvt,
+		modelRouter:        modelRouter,
+		forwarder:          forwarder,
+		metrics:            nil, // TODO
+		promMetrics:        promMetrics,
+		rateLimiter:        rateLimiter,
+		circuitBreaker:     circuitBreaker,
+		activeTracker:      activeTracker,
+		adminAuthService:    adminAuthService,
+		adminModelService:   adminModelService,
+		adminAPIKeyService:  adminAPIKeyService,
+		adminAPIHandlers:   adminAPIHandlers,
 	}
 
 	s.setupRouter()
@@ -187,6 +248,14 @@ func buildDSN(cfg *config.Config) string {
 		cfg.Auth.Database.Database,
 		cfg.Auth.Database.SSLMode,
 	)
+}
+
+// getEnvOrDefault 获取环境变量或返回默认值
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 // setupRouter 设置路由
@@ -260,6 +329,11 @@ func (s *Server) setupRouter() {
 				// 审计日志接口
 				admin.GET("/audit-logs", s.handleListAuditLogs)
 				admin.GET("/audit-logs/:id", s.handleGetAuditLog)
+			}
+
+			// JWT 认证的管理接口（新版控制台 API）
+			if s.adminAPIHandlers != nil {
+				s.adminAPIHandlers.RegisterRoutes(&s.router.RouterGroup)
 			}
 		}
 	}
