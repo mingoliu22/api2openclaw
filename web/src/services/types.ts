@@ -137,3 +137,38 @@ export interface ErrorResponse {
     message: string;
   };
 }
+
+// 用户相关类型
+export interface AdminUser {
+  id: string;
+  username: string;
+  email?: string;
+  role: UserRole;
+  is_active: boolean;
+  created_by?: string;
+  last_login_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type UserRole = 'super_admin' | 'admin' | 'operator' | 'viewer';
+
+export interface CreateUserRequest {
+  username: string;
+  password: string;
+  email?: string;
+  role: UserRole;
+}
+
+export interface UpdateUserRequest {
+  email?: string;
+  role?: UserRole;
+  password?: string;
+  is_active?: boolean;
+}
+
+export interface Claims {
+  user_id: string;
+  username: string;
+  role: UserRole;
+}

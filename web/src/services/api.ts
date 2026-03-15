@@ -140,4 +140,32 @@ export const systemAPI = {
     api.get('/admin/health'),
 };
 
+// 用户管理 API
+export const usersAPI = {
+  list: (params: { page?: number; limit?: number }) =>
+    api.get('/admin/users', { params }),
+
+  get: (id: string) =>
+    api.get(`/admin/users/${id}`),
+
+  create: (data: {
+    username: string;
+    password: string;
+    email?: string;
+    role: 'super_admin' | 'admin' | 'operator' | 'viewer';
+  }) =>
+    api.post('/admin/users', data),
+
+  update: (id: string, data: {
+    email?: string;
+    role?: 'super_admin' | 'admin' | 'operator' | 'viewer';
+    password?: string;
+    is_active?: boolean;
+  }) =>
+    api.put(`/admin/users/${id}`, data),
+
+  delete: (id: string) =>
+    api.delete(`/admin/users/${id}`),
+};
+
 export default api;

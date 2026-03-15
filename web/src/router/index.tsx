@@ -9,6 +9,7 @@ const DashboardOverview = lazy(() => import('../pages/DashboardOverview'));
 const ModelsPage = lazy(() => import('../pages/ModelsPage'));
 const KeysPage = lazy(() => import('../pages/KeysPage'));
 const LogsPage = lazy(() => import('../pages/LogsPage'));
+const UsersPage = lazy(() => import('../pages/UsersPage'));
 
 // 路由守卫组件
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -62,6 +63,10 @@ export const router = createBrowserRouter([
       {
         path: 'logs',
         element: <LogsPage />,
+      },
+      {
+        path: 'users',
+        element: <UsersPage />,
       },
     ],
   },
