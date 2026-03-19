@@ -10,6 +10,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { path: '/dashboard/overview', label: '概览', icon: '📊' },
   { path: '/dashboard/models', label: '模型配置', icon: '🤖' },
+  { path: '/dashboard/models/deploy-guide', label: '部署指南', icon: '📖' },
   { path: '/dashboard/keys', label: 'API Keys', icon: '🔑' },
   { path: '/dashboard/logs', label: '调用日志', icon: '📋' },
   { path: '/dashboard/users', label: '用户管理', icon: '👥' },

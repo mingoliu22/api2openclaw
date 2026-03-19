@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { systemAPI, logsAPI } from '../services/api';
 import type { UsageStats } from '../services/types';
 
 export default function DashboardOverview() {
+  const navigate = useNavigate();
   const [healthStatus, setHealthStatus] = useState<'healthy' | 'error'>('healthy');
   const [stats, setStats] = useState<UsageStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -102,6 +104,35 @@ export default function DashboardOverview() {
           </div>
         ))}
       </div>
+
+      {/* 空状态引导：模型列表为空时显示 */}
+      {stats?.active_models === 0 && (
+        <div className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-8">
+          <div className="flex items-start gap-6">
+            <div className="text-5xl">🚀</div>
+            <div className="flex-1">
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">开始使用 api2openclaw</h3>
+              <p className="text-gray-600 mb-4">
+                还没有配置任何模型。查看部署指南了解如何部署本地模型并接入网关。
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => navigate('/dashboard/models/deploy-guide')}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  查看部署指南
+                </button>
+                <button
+                  onClick={() => navigate('/dashboard/models')}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  添加模型
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 快速操作 */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">

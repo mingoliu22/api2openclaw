@@ -7,6 +7,7 @@ const LoginPage = lazy(() => import('../pages/LoginPage'));
 const DashboardLayout = lazy(() => import('../pages/DashboardLayout'));
 const DashboardOverview = lazy(() => import('../pages/DashboardOverview'));
 const ModelsPage = lazy(() => import('../pages/ModelsPage'));
+const DeployGuidePage = lazy(() => import('../pages/DeployGuidePage'));
 const KeysPage = lazy(() => import('../pages/KeysPage'));
 const LogsPage = lazy(() => import('../pages/LogsPage'));
 const UsersPage = lazy(() => import('../pages/UsersPage'));
@@ -57,6 +58,10 @@ export const router = createBrowserRouter([
       {
         path: 'models',
         element: <ModelsPage />,
+      },
+      {
+        path: 'models/deploy-guide',
+        element: <DeployGuidePage />,
       },
       {
         path: 'keys',

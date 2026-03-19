@@ -1,10 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { modelsAPI } from '../services/api';
 import type { Model, CreateModelRequest, UpdateModelRequest } from '../services/types';
 import { useToast } from '../components/Toast';
 
 export default function ModelsPage() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [models, setModels] = useState<Model[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -277,9 +279,18 @@ export default function ModelsPage() {
 
               {/* BaseURL */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  BaseURL <span className="text-red-500">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-gray-700">
+                    BaseURL <span className="text-red-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/dashboard/models/deploy-guide')}
+                    className="text-sm text-blue-600 hover:text-blue-700"
+                  >
+                    查看部署指南 →
+                  </button>
+                </div>
                 <input
                   type="url"
                   value={formData.base_url}
