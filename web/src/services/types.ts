@@ -25,6 +25,12 @@ export interface Model {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  // v0.3.0: 模型能力字段
+  supports_streaming?: boolean;
+  supports_tool_use?: boolean;
+  supports_json_mode?: boolean;
+  context_window?: number;
+  model_family?: string;
   health_status?: {
     status: 'healthy' | 'unhealthy' | 'unknown';
     latency_ms?: number;
@@ -39,6 +45,12 @@ export interface CreateModelRequest {
   base_url: string;
   api_key?: string;
   note?: string;
+  // v0.3.0: 模型能力字段
+  supports_streaming?: boolean;
+  supports_tool_use?: boolean;
+  supports_json_mode?: boolean;
+  context_window?: number;
+  model_family?: string;
 }
 
 export interface UpdateModelRequest {
@@ -47,6 +59,12 @@ export interface UpdateModelRequest {
   base_url?: string;
   api_key?: string;
   note?: string;
+  // v0.3.0: 模型能力字段
+  supports_streaming?: boolean;
+  supports_tool_use?: boolean;
+  supports_json_mode?: boolean;
+  context_window?: number;
+  model_family?: string;
 }
 
 export interface TestConnectionRequest {

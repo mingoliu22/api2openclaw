@@ -44,6 +44,22 @@ type PrometheusMetrics struct {
 
 	// 活跃请求
 	activeRequests prometheus.Gauge
+
+	// v0.3.0: AI 友好型指标
+	// 端到端请求延迟（含模型时间）
+	api2ocRequestDuration *prometheus.HistogramVec
+
+	// 网关自身处理延迟（不含模型时间）
+	api2ocMiddlewareDuration *prometheus.HistogramVec
+
+	// Token 消耗（按模型、key、类型分类）
+	api2ocTokensTotal *prometheus.CounterVec
+
+	// 错误计数（按错误码、模型分类）
+	api2ocErrorsTotal *prometheus.CounterVec
+
+	// SSE chunk 推送计数
+	api2ocStreamChunksTotal *prometheus.CounterVec
 }
 
 // NewPrometheusMetrics 创建 Prometheus 指标
@@ -179,6 +195,49 @@ func NewPrometheusMetrics() *PrometheusMetrics {
 				Help: "Number of active requests",
 			},
 		),
+
+		// v0.3.0: AI 友好型指标
+		api2ocRequestDuration: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name: "api2oc_request_duration_ms",
+				Help: "End-to-end request duration in milliseconds (including model time)",
+				Buckets: []float64{10, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 30000},
+			},
+			[]string{"model", "key_id"},
+		),
+
+		api2ocMiddlewareDuration: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name: "api2oc_middleware_duration_ms",
+				Help: "Gateway-only processing duration in milliseconds (excluding model time)",
+				Buckets: []float64{1, 5, 10, 20, 50, 100, 200, 500},
+			},
+			[]string{"model"},
+		),
+
+		api2ocTokensTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "api2oc_tokens_total",
+				Help: "Total tokens consumed, by model, key_id, and type (prompt/completion)",
+			},
+			[]string{"model", "key_id", "type"},
+		),
+
+		api2ocErrorsTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "api2oc_errors_total",
+				Help: "Total errors, by error_code and model",
+			},
+			[]string{"error_code", "model"},
+		),
+
+		api2ocStreamChunksTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "api2oc_stream_chunks_total",
+				Help: "Total SSE chunks pushed (for streaming performance analysis)",
+			},
+			[]string{"model", "key_id"},
+		),
 	}
 
 	// 注册指标
@@ -199,6 +258,12 @@ func NewPrometheusMetrics() *PrometheusMetrics {
 		m.circuitErrors,
 		m.tokensTotal,
 		m.activeRequests,
+		// v0.3.0: 注册 AI 友好型指标
+		m.api2ocRequestDuration,
+		m.api2ocMiddlewareDuration,
+		m.api2ocTokensTotal,
+		m.api2ocErrorsTotal,
+		m.api2ocStreamChunksTotal,
 	)
 	m.registry.MustRegister(collectors.NewGoCollector())
 	m.registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
@@ -327,4 +392,32 @@ func (t *ActiveRequestsTracker) End() {
 // Count 获取当前活跃请求数
 func (t *ActiveRequestsTracker) Count() int64 {
 	return atomic.LoadInt64(&t.counter)
+}
+
+// === v0.3.0: AI 友好型指标方法 ===
+
+// RecordRequestDuration 记录端到端请求延迟（含模型时间）
+func (m *PrometheusMetrics) RecordRequestDuration(model, keyID string, durationMs float64) {
+	m.api2ocRequestDuration.WithLabelValues(model, keyID).Observe(durationMs)
+}
+
+// RecordMiddlewareDuration 记录网关自身处理延迟（不含模型时间）
+func (m *PrometheusMetrics) RecordMiddlewareDuration(model string, durationMs float64) {
+	m.api2ocMiddlewareDuration.WithLabelValues(model).Observe(durationMs)
+}
+
+// RecordAPI2Tokens 记录 Token 消耗（v0.3.0 版本）
+func (m *PrometheusMetrics) RecordAPI2Tokens(model, keyID string, promptTokens, completionTokens int) {
+	m.api2ocTokensTotal.WithLabelValues(model, keyID, "prompt").Add(float64(promptTokens))
+	m.api2ocTokensTotal.WithLabelValues(model, keyID, "completion").Add(float64(completionTokens))
+}
+
+// RecordAPI2Error 记录错误（v0.3.0 版本）
+func (m *PrometheusMetrics) RecordAPI2Error(errorCode, model string) {
+	m.api2ocErrorsTotal.WithLabelValues(errorCode, model).Inc()
+}
+
+// RecordStreamChunk 记录 SSE chunk 推送
+func (m *PrometheusMetrics) RecordStreamChunk(model, keyID string) {
+	m.api2ocStreamChunksTotal.WithLabelValues(model, keyID).Inc()
 }

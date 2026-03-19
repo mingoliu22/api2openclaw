@@ -18,6 +18,12 @@ export default function ModelsPage() {
     base_url: '',
     api_key: '',
     note: '',
+    // v0.3.0: 模型能力字段
+    supports_streaming: true,
+    supports_tool_use: false,
+    supports_json_mode: false,
+    context_window: 4096,
+    model_family: 'other',
   });
 
   // 连通性测试状态
@@ -56,6 +62,11 @@ export default function ModelsPage() {
       base_url: '',
       api_key: '',
       note: '',
+      supports_streaming: true,
+      supports_tool_use: false,
+      supports_json_mode: false,
+      context_window: 4096,
+      model_family: 'other',
     });
     setConnectionResult(null);
     setShowForm(true);
@@ -70,6 +81,11 @@ export default function ModelsPage() {
       base_url: model.base_url,
       api_key: '', // API Key 不回填
       note: model.note || '',
+      supports_streaming: model.supports_streaming ?? true,
+      supports_tool_use: model.supports_tool_use ?? false,
+      supports_json_mode: model.supports_json_mode ?? false,
+      context_window: model.context_window ?? 4096,
+      model_family: model.model_family || 'other',
     });
     setConnectionResult(null);
     setShowForm(true);
@@ -135,6 +151,11 @@ export default function ModelsPage() {
           model_id: formData.model_id,
           base_url: formData.base_url,
           note: formData.note,
+          supports_streaming: formData.supports_streaming,
+          supports_tool_use: formData.supports_tool_use,
+          supports_json_mode: formData.supports_json_mode,
+          context_window: formData.context_window,
+          model_family: formData.model_family,
         };
         if (formData.api_key) {
           updateData.api_key = formData.api_key;
@@ -148,6 +169,11 @@ export default function ModelsPage() {
           model_id: formData.model_id,
           base_url: formData.base_url,
           note: formData.note,
+          supports_streaming: formData.supports_streaming,
+          supports_tool_use: formData.supports_tool_use,
+          supports_json_mode: formData.supports_json_mode,
+          context_window: formData.context_window,
+          model_family: formData.model_family,
         };
         if (formData.api_key) {
           createData.api_key = formData.api_key;
@@ -319,6 +345,101 @@ export default function ModelsPage() {
                 maxLength={200}
               />
               <p className="text-xs text-gray-500 mt-1">最多 200 字符</p>
+            </div>
+
+            {/* v0.3.0: 模型能力配置 */}
+            <div className="border-t border-gray-200 pt-4">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">模型能力</h3>
+              <div className="grid grid-cols-3 gap-4">
+                {/* Streaming 支持 */}
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Streaming</label>
+                    <p className="text-xs text-gray-500">SSE 流式输出</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.supports_streaming}
+                      onChange={(e) => setFormData({ ...formData, supports_streaming: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+
+                {/* Tool Use 支持 */}
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Tool Use</label>
+                    <p className="text-xs text-gray-500">函数调用</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.supports_tool_use}
+                      onChange={(e) => setFormData({ ...formData, supports_tool_use: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+
+                {/* JSON Mode 支持 */}
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">JSON Mode</label>
+                    <p className="text-xs text-gray-500">结构化输出</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.supports_json_mode}
+                      onChange={(e) => setFormData({ ...formData, supports_json_mode: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                {/* 上下文窗口 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    上下文窗口（tokens）
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.context_window}
+                    onChange={(e) => setFormData({ ...formData, context_window: parseInt(e.target.value) || 4096 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    min="1024"
+                    max="2000000"
+                    step="1024"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">模型的上下文窗口大小</p>
+                </div>
+
+                {/* 模型家族 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    模型家族
+                  </label>
+                  <select
+                    value={formData.model_family}
+                    onChange={(e) => setFormData({ ...formData, model_family: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="other">Other</option>
+                    <option value="qwen">Qwen (通义千问)</option>
+                    <option value="deepseek">DeepSeek</option>
+                    <option value="llama">Llama</option>
+                    <option value="openai">OpenAI</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">用于格式归一化策略选择</p>
+                </div>
+              </div>
             </div>
 
             {/* 表单按钮 */}

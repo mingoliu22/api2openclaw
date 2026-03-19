@@ -98,6 +98,17 @@ type ConverterConfig struct {
 	InputFormat  string            `yaml:"input_format"`
 	OutputFormat string            `yaml:"output_format"`
 	Templates    TemplatesConfig   `yaml:"templates"`
+
+	// v0.3.0: JSON 强制输出配置
+	JSONEnforce *JSONEnforceConfig `yaml:"json_enforce,omitempty"`
+}
+
+// JSONEnforceConfig JSON 强制输出配置
+type JSONEnforceConfig struct {
+	// Strategy 兜底失败策略：return_error 或 return_500
+	Strategy string `yaml:"strategy"`
+	// StrictMode 严格模式
+	StrictMode bool `yaml:"strict_mode"`
 }
 
 // TemplatesConfig 模板配置

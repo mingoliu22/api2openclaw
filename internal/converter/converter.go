@@ -6,14 +6,52 @@ import (
 	"io"
 )
 
+// === 导出的标准类型 ===
+
+// OpenAIResponse 标准 OpenAI 响应（导出供外部使用）
+type OpenAIResponse = openAIResponse
+
+// OpenAIStreamChunk OpenAI 流式 chunk（导出供外部使用）
+type OpenAIStreamChunk = openAIStreamChunk
+
+// OpenAIChoice OpenAI 选择
+type OpenAIChoice = openAIChoice
+
+// OpenAIUsage OpenAI 使用量
+type OpenAIUsage = openAIUsage
+
+// === 内部类型定义 ===
+
 // Converter 格式转换器接口
+// v0.3.0: 向后兼容保留，新代码应使用 Normalizer 接口
 type Converter interface {
-	// Convert 转换完整响应
+	// Convert 转换完整响应（旧接口，向后兼容）
 	Convert(data []byte) ([]byte, error)
 
-	// ConvertStream 转换流式响应
+	// ConvertStream 转换流式响应（旧接口，向后兼容）
 	ConvertStream(r io.Reader, w io.Writer) error
 }
+
+// Normalizer 归一化器接口
+// v0.3.0: 核心接口，将各模型格式归一化为标准 OpenAI JSON
+type Normalizer interface {
+	// Normalize 归一化完整响应为标准 OpenAI 格式
+	Normalize(raw []byte, modelFamily ModelFamily) (*OpenAIResponse, error)
+
+	// NormalizeStreamChunk 归一化流式响应 chunk
+	NormalizeStreamChunk(raw []byte, modelFamily ModelFamily) (*OpenAIStreamChunk, error)
+}
+
+// ModelFamily 模型家族类型
+type ModelFamily string
+
+const (
+	ModelFamilyDeepSeek ModelFamily = "deepseek"
+	ModelFamilyQwen     ModelFamily = "qwen"
+	ModelFamilyLlama    ModelFamily = "llama"
+	ModelFamilyOpenAI   ModelFamily = "openai"
+	ModelFamilyOther    ModelFamily = "other"
+)
 
 // ConverterConfig 转换器配置
 type ConverterConfig struct {
@@ -59,6 +97,26 @@ func NewConverter(config *ConverterConfig) (Converter, error) {
 	default:
 		return NewDeepSeekConverter(config), nil // 默认使用 DeepSeek
 	}
+}
+
+// NewNormalizer 创建归一化器
+func NewNormalizerV1(config *ConverterConfig) Normalizer {
+	return &normalizerAdapter{config: config}
+}
+
+// normalizerAdapter 归一化器适配器
+type normalizerAdapter struct {
+	config *ConverterConfig
+}
+
+func (a *normalizerAdapter) Normalize(raw []byte, modelFamily ModelFamily) (*OpenAIResponse, error) {
+	n := NewNormalizer(a.config)
+	return n.Normalize(raw, modelFamily)
+}
+
+func (a *normalizerAdapter) NormalizeStreamChunk(raw []byte, modelFamily ModelFamily) (*OpenAIStreamChunk, error) {
+	n := NewNormalizer(a.config)
+	return n.NormalizeStreamChunk(raw, modelFamily)
 }
 
 // DeepSeekConverter DeepSeek 转换器
