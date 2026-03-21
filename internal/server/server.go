@@ -1037,10 +1037,27 @@ func (s *Server) handleDeleteAPIKey(c *gin.Context) {
 // corsMiddleware CORS 中间件
 func (s *Server) corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+		// 允许的来源列表
+		allowedOrigins := map[string]bool{
+			"http://localhost:5173":     true,
+			"http://localhost:5174":     true,
+			"http://127.0.0.1:5173":     true,
+			"http://127.0.0.1:5174":     true,
+			"http://localhost:3000":     true,
+			"http://localhost:8080":     true,
+		}
+
+		// 检查来源是否允许
+		if allowedOrigins[origin] {
+			c.Header("Access-Control-Allow-Origin", origin)
+		}
+
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Cookie")
 		c.Header("Access-Control-Allow-Credentials", "true")
+		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type")
+		c.Header("Access-Control-Max-Age", "86400")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)

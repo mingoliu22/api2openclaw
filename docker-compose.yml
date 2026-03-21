@@ -77,6 +77,24 @@ services:
     networks:
       - api2openclaw-network
     restart: unless-stopped
+    # 暴露端口但不对外访问，通过 nginx 代理
+    expose:
+      - "5173"
+
+  # Nginx 反向代理
+  nginx:
+    image: nginx:alpine
+    container_name: api2openclaw-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - api
+    networks:
+      - api2openclaw-network
+    restart: unless-stopped
 
   # pgAdmin（可选，用于数据库管理）
   pgadmin:
