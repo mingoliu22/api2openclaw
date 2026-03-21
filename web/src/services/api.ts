@@ -85,19 +85,37 @@ export const keysAPI = {
   list: (status = '') =>
     api.get(`/admin/keys?status=${status}`),
 
+  get: (id: string) =>
+    api.get(`/admin/keys/${id}`),
+
   create: (data: {
     label: string;
     model_alias?: string;
     expires_at?: string;
     note?: string;
+    daily_token_soft_limit?: number;
+    daily_token_hard_limit?: number;
+    priority?: 'high' | 'normal' | 'low';
   }) =>
     api.post('/admin/keys', data),
+
+  update: (id: string, data: {
+    label?: string;
+    note?: string;
+    daily_token_soft_limit?: number;
+    daily_token_hard_limit?: number;
+    priority?: 'high' | 'normal' | 'low';
+  }) =>
+    api.put(`/admin/keys/${id}`, data),
 
   revoke: (id: string) =>
     api.delete(`/admin/keys/${id}`),
 
   getUsage: (id: string) =>
     api.get(`/admin/keys/${id}/usage`),
+
+  getQuota: (id: string) =>
+    api.get(`/admin/keys/${id}/quota`),
 };
 
 // 日志和统计 API
@@ -310,6 +328,99 @@ export const billingAPI = {
     notes?: string;
   }) =>
     api.post(`/admin/billing/invoices/${invoiceId}/payments`, data),
+};
+
+// Token Factory - 统计 API（公开）
+export const statsAPI = {
+  // 获取实时统计概览
+  getOverview: () =>
+    api.get('/api/stats/overview'),
+
+  // 获取每日趋势图数据
+  getDailyChart: (days = 7) =>
+    api.get(`/api/stats/daily-chart?days=${days}`),
+};
+
+// Token Factory - 成本 API
+export const costAPI = {
+  // 获取成本统计（公开）
+  getStats: (days = 7) =>
+    api.get(`/api/cost/stats?days=${days}`),
+
+  // 管理接口：成本配置列表
+  listConfigs: () =>
+    api.get('/admin/cost/configs'),
+
+  // 获取模型的成本配置
+  getModelConfigs: (modelId: string) =>
+    api.get(`/admin/cost/configs/model/${modelId}`),
+
+  // 获取当前生效的成本配置
+  getActiveConfig: (modelId: string) =>
+    api.get(`/admin/cost/configs/model/${modelId}/active`),
+
+  // 创建成本配置
+  createConfig: (data: {
+    model_id: string;
+    gpu_count: number;
+    power_per_gpu_w: number;
+    electricity_price_per_kwh: number;
+    depreciation_per_gpu_month: number;
+    pue: number;
+    effective_from?: string;
+  }) =>
+    api.post('/admin/cost/configs', data),
+
+  // 更新成本配置
+  updateConfig: (id: string, data: {
+    gpu_count?: number;
+    power_per_gpu_w?: number;
+    electricity_price_per_kwh?: number;
+    depreciation_per_gpu_month?: number;
+    pue?: number;
+  }) =>
+    api.put(`/admin/cost/configs/${id}`, data),
+
+  // 删除成本配置
+  deleteConfig: (id: string) =>
+    api.delete(`/admin/cost/configs/${id}`),
+
+  // 获取每日成本统计
+  getDailyStats: (days = 30) =>
+    api.get(`/admin/cost/stats/daily?days=${days}`),
+
+  // 获取模型的每日成本统计
+  getModelDailyStats: (modelAlias: string, days = 30) =>
+    api.get(`/admin/cost/stats/daily/model/${modelAlias}?days=${days}`),
+
+  // 获取成本汇总
+  getSummary: (days = 30) =>
+    api.get(`/admin/cost/stats/summary?days=${days}`),
+
+  // 刷新成本统计
+  refresh: () =>
+    api.post('/admin/cost/stats/refresh'),
+
+  // 计算指定日期的成本
+  calculate: (statDate: string) =>
+    api.post('/admin/cost/stats/calculate', { stat_date: statDate }),
+};
+
+// Token Factory - 配额 API
+export const quotaAPI = {
+  // 获取 API Key 配额状态
+  getStatus: (keyId: string) =>
+    api.get(`/admin/keys/${keyId}/quota`),
+
+  // 更新 API Key（配额字段）
+  updateKey: (id: string, data: {
+    label?: string;
+    note?: string;
+    daily_token_soft_limit?: number;
+    daily_token_hard_limit?: number;
+    priority?: 'high' | 'normal' | 'low';
+  }) =>
+    api.put(`/admin/keys/${id}`, data),
 };
 
 export default api;

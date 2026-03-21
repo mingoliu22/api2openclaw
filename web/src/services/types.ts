@@ -90,6 +90,10 @@ export interface APIKey {
   note?: string;
   created_at: string;
   revoked_at?: string;
+  // v0.3.1: 配额字段（Token Factory TF-003）
+  daily_token_soft_limit?: number;
+  daily_token_hard_limit?: number;
+  priority?: 'high' | 'normal' | 'low';
 }
 
 export interface CreateKeyRequest {
@@ -97,6 +101,10 @@ export interface CreateKeyRequest {
   model_alias?: string;
   expires_at?: string;
   note?: string;
+  // v0.3.1: 配额字段
+  daily_token_soft_limit?: number;
+  daily_token_hard_limit?: number;
+  priority?: 'high' | 'normal' | 'low';
 }
 
 // 日志相关类型

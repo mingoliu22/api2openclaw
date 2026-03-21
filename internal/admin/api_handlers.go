@@ -20,6 +20,8 @@ type APIHandlers struct {
 	authHandler      *Handler
 	pluginHandlers   *PluginHandlers
 	billingHandlers  *BillingHandlers
+	statsHandlers    *StatsHandlers
+	costHandlers     *CostHandlers
 }
 
 // NewAPIHandlers 创建 API 处理器
@@ -51,6 +53,16 @@ func (h *APIHandlers) SetPluginHandlers(handlers *PluginHandlers) {
 // SetBillingHandlers 设置计费处理器
 func (h *APIHandlers) SetBillingHandlers(handlers *BillingHandlers) {
 	h.billingHandlers = handlers
+}
+
+// SetStatsHandlers 设置统计处理器
+func (h *APIHandlers) SetStatsHandlers(handlers *StatsHandlers) {
+	h.statsHandlers = handlers
+}
+
+// SetCostHandlers 设置成本处理器
+func (h *APIHandlers) SetCostHandlers(handlers *CostHandlers) {
+	h.costHandlers = handlers
 }
 
 // notifyModelChanged 通知模型配置变更
@@ -99,9 +111,11 @@ func (h *APIHandlers) RegisterRoutes(r *gin.RouterGroup) {
 		// API Key 管理
 		admin.GET("/keys", h.GetAPIKeys)
 		admin.POST("/keys", h.CreateAPIKey)
+		admin.PUT("/keys/:id", h.UpdateAPIKey)
 		admin.DELETE("/keys/:id", h.RevokeAPIKey)
 		admin.GET("/keys/:id", h.GetAPIKey)
 		admin.GET("/keys/:id/usage", h.GetAPIKeyUsage)
+		admin.GET("/keys/:id/quota", h.GetAPIKeyQuota)
 
 		// 用量与日志
 		admin.GET("/usage", h.GetUsage)
@@ -154,8 +168,58 @@ func (h *APIHandlers) RegisterRoutes(r *gin.RouterGroup) {
 			}
 		}
 
+		// 统计管理（需要管理员权限）
+		if h.statsHandlers != nil {
+			stats := admin.Group("/stats")
+			stats.Use(RequirePermissionMiddleware(h.authService.jwtManager, "admin"))
+			{
+				stats.GET("/realtime", h.statsHandlers.GetRealtimeStats)
+				stats.GET("/daily", h.statsHandlers.GetDailyStats)
+				stats.GET("/models", h.statsHandlers.GetModelStats)
+				stats.GET("/threshold", h.statsHandlers.GetThreshold)
+				stats.PUT("/threshold", h.statsHandlers.UpdateThreshold)
+			}
+		}
+
+		// 成本管理（需要管理员权限）
+		if h.costHandlers != nil {
+			cost := admin.Group("/cost")
+			cost.Use(RequirePermissionMiddleware(h.authService.jwtManager, "admin"))
+			{
+				// 成本配置
+				cost.GET("/configs", h.costHandlers.ListCostConfigs)
+				cost.GET("/configs/model/:model_id", h.costHandlers.GetModelCostConfigs)
+				cost.GET("/configs/model/:model_id/active", h.costHandlers.GetActiveCostConfig)
+				cost.POST("/configs", RequirePermissionMiddleware(h.authService.jwtManager, "admin"), h.costHandlers.CreateCostConfig)
+				cost.PUT("/configs/:id", RequirePermissionMiddleware(h.authService.jwtManager, "admin"), h.costHandlers.UpdateCostConfig)
+				cost.DELETE("/configs/:id", RequirePermissionMiddleware(h.authService.jwtManager, "admin"), h.costHandlers.DeleteCostConfig)
+
+				// 成本统计
+				cost.GET("/stats/daily", h.costHandlers.GetDailyCostStats)
+				cost.GET("/stats/daily/model/:model_alias", h.costHandlers.GetDailyCostStatsByModel)
+				cost.GET("/stats/summary", h.costHandlers.GetCostSummary)
+				cost.POST("/stats/refresh", RequirePermissionMiddleware(h.authService.jwtManager, "admin"), h.costHandlers.RefreshCostStats)
+				cost.POST("/stats/calculate", RequirePermissionMiddleware(h.authService.jwtManager, "admin"), h.costHandlers.CalculateDailyCosts)
+			}
+		}
+
 		// 系统状态
 		admin.GET("/health", h.GetHealth)
+	}
+
+	// 公开 API（无需认证，供前端仪表盘使用）
+	api := r.Group("/api")
+	{
+		// 统计数据（公开）
+		if h.statsHandlers != nil {
+			api.GET("/stats/overview", h.statsHandlers.GetPublicStats)
+			api.GET("/stats/daily-chart", h.statsHandlers.GetDailyChart)
+		}
+
+		// 成本统计（公开）
+		if h.costHandlers != nil {
+			api.GET("/cost/stats", h.costHandlers.GetPublicCostStats)
+		}
 	}
 }
 
@@ -368,6 +432,50 @@ func (h *APIHandlers) GetAPIKey(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": apiKey,
+	})
+}
+
+// UpdateAPIKey 更新 API Key（仅配额字段）
+func (h *APIHandlers) UpdateAPIKey(c *gin.Context) {
+	id := c.Param("id")
+
+	var req UpdateAPIKeyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	apiKey, err := h.apiKeyService.Update(c.Request.Context(), id, &req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":    apiKey,
+		"message": "API Key 已更新",
+	})
+}
+
+// GetAPIKeyQuota 获取 API Key 配额状态
+func (h *APIHandlers) GetAPIKeyQuota(c *gin.Context) {
+	id := c.Param("id")
+
+	// 先获取 API Key 信息（包含配额限制）
+	apiKey, err := h.apiKeyService.GetByID(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "API Key not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"key_id":                 apiKey.ID,
+			"label":                  apiKey.Label,
+			"daily_token_soft_limit": apiKey.DailyTokenSoftLimit,
+			"daily_token_hard_limit": apiKey.DailyTokenHardLimit,
+			"priority":               apiKey.Priority,
+		},
 	})
 }
 

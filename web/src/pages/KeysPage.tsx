@@ -3,12 +3,22 @@ import { keysAPI } from '../services/api';
 import type { APIKey, CreateKeyRequest } from '../services/types';
 import { useToast } from '../components/Toast';
 
+interface QuotaStatus {
+  key_id: string;
+  label: string;
+  daily_token_soft_limit: number | null;
+  daily_token_hard_limit: number | null;
+  priority: string;
+}
+
 export default function KeysPage() {
   const toast = useToast();
   const [keys, setKeys] = useState<APIKey[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showQuotaDialog, setShowQuotaDialog] = useState(false);
+  const [selectedKeyQuota, setSelectedKeyQuota] = useState<QuotaStatus | null>(null);
   const [createdKey, setCreatedKey] = useState<APIKey | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -19,6 +29,9 @@ export default function KeysPage() {
     model_alias: '',
     expires_at: '',
     note: '',
+    daily_token_soft_limit: '',
+    daily_token_hard_limit: '',
+    priority: 'normal',
   });
 
   // 获取 Key 列表
@@ -44,10 +57,24 @@ export default function KeysPage() {
       model_alias: '',
       expires_at: '',
       note: '',
+      daily_token_soft_limit: '',
+      daily_token_hard_limit: '',
+      priority: 'normal',
     });
     setCreatedKey(null);
     setShowCreateDialog(true);
     setCopied(false);
+  };
+
+  // 查看配额详情
+  const handleViewQuota = async (key: APIKey) => {
+    try {
+      const response = await keysAPI.getQuota(key.id);
+      setSelectedKeyQuota(response.data.data);
+      setShowQuotaDialog(true);
+    } catch (error) {
+      toast.error('获取配额信息失败');
+    }
   };
 
   // 提交创建表单
@@ -71,6 +98,15 @@ export default function KeysPage() {
       }
       if (formData.expires_at) {
         createData.expires_at = formData.expires_at;
+      }
+      if (formData.daily_token_soft_limit) {
+        createData.daily_token_soft_limit = parseInt(formData.daily_token_soft_limit);
+      }
+      if (formData.daily_token_hard_limit) {
+        createData.daily_token_hard_limit = parseInt(formData.daily_token_hard_limit);
+      }
+      if (formData.priority) {
+        createData.priority = formData.priority as 'high' | 'normal' | 'low';
       }
 
       const response = await keysAPI.create(createData);
@@ -195,6 +231,7 @@ export default function KeysPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">标签</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Key 值</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">绑定模型</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">优先级</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">有效期</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">创建时间</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
@@ -207,6 +244,17 @@ export default function KeysPage() {
                   <td className="px-6 py-4 font-medium text-gray-900">{key.label}</td>
                   <td className="px-6 py-4 font-mono text-sm text-gray-600">{key.key_prefix}•••••••••</td>
                   <td className="px-6 py-4 text-gray-600">{key.model_alias || '全部'}</td>
+                  <td className="px-6 py-4">
+                    {key.priority && (
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        key.priority === 'high' ? 'bg-purple-100 text-purple-700' :
+                        key.priority === 'low' ? 'bg-gray-100 text-gray-700' :
+                        'bg-blue-100 text-blue-700'
+                      }`}>
+                        {key.priority === 'high' ? '高' : key.priority === 'low' ? '低' : '普通'}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-6 py-4 text-gray-600">
                     {key.expires_at ? new Date(key.expires_at).toLocaleDateString('zh-CN') : '永久'}
                   </td>
@@ -219,15 +267,21 @@ export default function KeysPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    {key.status === 'active' ? (
-                      <button
-                        onClick={() => handleRevoke(key)}
-                        className="text-red-600 hover:text-red-700 text-sm"
-                      >
-                        吊销
-                      </button>
-                    ) : (
-                      <span className="text-gray-400 text-sm">已失效</span>
+                    {key.status === 'active' && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleViewQuota(key)}
+                          className="text-blue-600 hover:text-blue-700 text-sm"
+                        >
+                          配额
+                        </button>
+                        <button
+                          onClick={() => handleRevoke(key)}
+                          className="text-red-600 hover:text-red-700 text-sm"
+                        >
+                          吊销
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -305,6 +359,60 @@ export default function KeysPage() {
                     />
                   </div>
 
+                  {/* 配额设置 */}
+                  <div className="border-t pt-4 mt-4">
+                    <h3 className="text-sm font-medium text-gray-900 mb-3">配额设置（可选）</h3>
+
+                    {/* 软上限 */}
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        每日软上限（Token）
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.daily_token_soft_limit}
+                        onChange={(e) => setFormData({ ...formData, daily_token_soft_limit: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="100000"
+                        min="0"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">超过此值将发送告警通知</p>
+                    </div>
+
+                    {/* 硬上限 */}
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        每日硬上限（Token）
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.daily_token_hard_limit}
+                        onChange={(e) => setFormData({ ...formData, daily_token_hard_limit: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="200000"
+                        min="0"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">超过此值将拒绝请求（429）</p>
+                    </div>
+
+                    {/* 优先级 */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        优先级
+                      </label>
+                      <select
+                        value={formData.priority}
+                        onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="normal">普通</option>
+                        <option value="high">高</option>
+                        <option value="low">低</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">资源紧张时的调度优先级</p>
+                    </div>
+                  </div>
+
                   {/* 按钮 */}
                   <div className="flex gap-2">
                     <button
@@ -359,6 +467,72 @@ export default function KeysPage() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 配额详情弹窗 */}
+      {showQuotaDialog && selectedKeyQuota && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">配额状态</h2>
+
+            <div className="space-y-4">
+              {/* Key 信息 */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-sm text-gray-600">Key 标签</p>
+                <p className="text-lg font-semibold text-gray-900">{selectedKeyQuota.label}</p>
+              </div>
+
+              {/* 优先级 */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">优先级</span>
+                <span className={`text-xs px-2 py-1 rounded ${
+                  selectedKeyQuota.priority === 'high' ? 'bg-purple-100 text-purple-700' :
+                  selectedKeyQuota.priority === 'low' ? 'bg-gray-100 text-gray-700' :
+                  'bg-blue-100 text-blue-700'
+                }`}>
+                  {selectedKeyQuota.priority === 'high' ? '高' : selectedKeyQuota.priority === 'low' ? '低' : '普通'}
+                </span>
+              </div>
+
+              {/* 软上限 */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">每日软上限</span>
+                <span className="font-medium text-gray-900">
+                  {selectedKeyQuota.daily_token_soft_limit
+                    ? selectedKeyQuota.daily_token_soft_limit.toLocaleString()
+                    : '未设置'}
+                </span>
+              </div>
+
+              {/* 硬上限 */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">每日硬上限</span>
+                <span className="font-medium text-gray-900">
+                  {selectedKeyQuota.daily_token_hard_limit
+                    ? selectedKeyQuota.daily_token_hard_limit.toLocaleString()
+                    : '未设置'}
+                </span>
+              </div>
+
+              {/* 说明 */}
+              <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-800">
+                <p className="font-medium mb-1">配额说明：</p>
+                <ul className="list-disc list-inside space-y-1 text-xs">
+                  <li>软上限：超过时发送告警通知，不拦截请求</li>
+                  <li>硬上限：超过时直接拒绝请求，返回 429 错误</li>
+                  <li>每日 00:00 重置配额</li>
+                </ul>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowQuotaDialog(false)}
+              className="w-full mt-6 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              关闭
+            </button>
           </div>
         </div>
       )}

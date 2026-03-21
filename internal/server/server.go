@@ -232,6 +232,16 @@ func New(cfg *config.Config, configPath string) (*Server, error) {
 		billingHandlers := admin.NewBillingHandlers(billingService)
 		adminAPIHandlers.SetBillingHandlers(billingHandlers)
 
+		// 初始化统计服务
+		statsStore := admin.NewStatsStore(sqlxDB)
+		statsHandlers := admin.NewStatsHandlers(statsStore)
+		adminAPIHandlers.SetStatsHandlers(statsHandlers)
+
+		// 初始化成本服务
+		costStore := admin.NewCostStore(sqlxDB)
+		costHandlers := admin.NewCostHandlers(costStore)
+		adminAPIHandlers.SetCostHandlers(costHandlers)
+
 		// 创建配置重载监听器
 		reloadWatcher = admin.NewReloadWatcher(sqlxDB)
 	}

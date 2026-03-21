@@ -21,6 +21,11 @@ type APIKey struct {
 	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
 	RevokedAt   *time.Time `json:"revoked_at,omitempty" db:"revoked_at"`
 
+	// 配额字段（Token Factory TF-003）
+	DailyTokenSoftLimit *int64  `json:"daily_token_soft_limit,omitempty" db:"daily_token_soft_limit"`
+	DailyTokenHardLimit *int64  `json:"daily_token_hard_limit,omitempty" db:"daily_token_hard_limit"`
+	Priority            string  `json:"priority,omitempty" db:"priority"` // high, normal, low
+
 	// 运行时字段
 	KeyValue   string     `json:"key,omitempty"` // 仅在创建时返回明文
 }
@@ -31,6 +36,7 @@ type APIKeyStore interface {
 	GetByID(ctx context.Context, id string) (*APIKey, error)
 	GetByKeyHash(ctx context.Context, keyHash string) (*APIKey, error)
 	Create(ctx context.Context, key *APIKey) error
+	Update(ctx context.Context, id string, req *UpdateAPIKeyRequest) (*APIKey, error)
 	Revoke(ctx context.Context, id string) error
 	Delete(ctx context.Context, id string) error
 	UpdateStatus(ctx context.Context, id string, status string) error
@@ -58,10 +64,24 @@ func NewAPIKeyService(store APIKeyStore) *APIKeyService {
 
 // CreateAPIKeyRequest 创建 API Key 请求
 type CreateAPIKeyRequest struct {
-	Label      string     `json:"label" binding:"required"`
-	ModelAlias *string    `json:"model_alias"`
-	ExpiresAt  *time.Time `json:"expires_at"`
-	Note       string     `json:"note"`
+	Label                string     `json:"label" binding:"required"`
+	ModelAlias           *string    `json:"model_alias"`
+	ExpiresAt            *time.Time `json:"expires_at"`
+	Note                 string     `json:"note"`
+
+	// 配额字段（Token Factory TF-003）
+	DailyTokenSoftLimit  *int64     `json:"daily_token_soft_limit,omitempty"`
+	DailyTokenHardLimit  *int64     `json:"daily_token_hard_limit,omitempty"`
+	Priority             string     `json:"priority,omitempty"` // high, normal, low (默认: normal)
+}
+
+// UpdateAPIKeyRequest 更新 API Key 请求（仅配额字段）
+type UpdateAPIKeyRequest struct {
+	Label                *string    `json:"label,omitempty"`
+	Note                 *string    `json:"note,omitempty"`
+	DailyTokenSoftLimit  *int64     `json:"daily_token_soft_limit,omitempty"`
+	DailyTokenHardLimit  *int64     `json:"daily_token_hard_limit,omitempty"`
+	Priority             *string    `json:"priority,omitempty"`
 }
 
 // List 获取 API Key 列表
@@ -96,14 +116,22 @@ func (s *APIKeyService) Create(ctx context.Context, req *CreateAPIKeyRequest) (*
 	keyPrefix := s.getKeyPrefix(keyValue)
 
 	apiKey := &APIKey{
-		Label:      req.Label,
-		KeyHash:    keyHash,
-		KeyPrefix:  keyPrefix,
-		ModelAlias: req.ModelAlias,
-		ExpiresAt:  req.ExpiresAt,
-		Status:     "active",
-		Note:       req.Note,
-		KeyValue:   keyValue, // 仅在内存中，不存储到数据库
+		Label:                req.Label,
+		KeyHash:              keyHash,
+		KeyPrefix:            keyPrefix,
+		ModelAlias:           req.ModelAlias,
+		ExpiresAt:            req.ExpiresAt,
+		Status:               "active",
+		Note:                 req.Note,
+		DailyTokenSoftLimit:  req.DailyTokenSoftLimit,
+		DailyTokenHardLimit:  req.DailyTokenHardLimit,
+		Priority:             req.Priority,
+		KeyValue:             keyValue, // 仅在内存中，不存储到数据库
+	}
+
+	// 设置默认优先级
+	if apiKey.Priority == "" {
+		apiKey.Priority = "normal"
 	}
 
 	if err := s.store.Create(ctx, apiKey); err != nil {
@@ -121,6 +149,11 @@ func (s *APIKeyService) Revoke(ctx context.Context, id string) error {
 // Delete 删除 API Key
 func (s *APIKeyService) Delete(ctx context.Context, id string) error {
 	return s.store.Delete(ctx, id)
+}
+
+// Update 更新 API Key（仅配额字段）
+func (s *APIKeyService) Update(ctx context.Context, id string, req *UpdateAPIKeyRequest) (*APIKey, error) {
+	return s.store.Update(ctx, id, req)
 }
 
 // ValidateKey 验证 API Key

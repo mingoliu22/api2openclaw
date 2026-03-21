@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { modelsAPI } from '../services/api';
 import type { Model, CreateModelRequest, UpdateModelRequest } from '../services/types';
 import { useToast } from '../components/Toast';
+import CostConfigDialog from '../components/CostConfigDialog';
 
 export default function ModelsPage() {
   const toast = useToast();
@@ -10,6 +11,8 @@ export default function ModelsPage() {
   const [models, setModels] = useState<Model[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showCostConfig, setShowCostConfig] = useState(false);
+  const [selectedModelForCost, setSelectedModelForCost] = useState<Model | null>(null);
   const [editingModel, setEditingModel] = useState<Model | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -221,6 +224,12 @@ export default function ModelsPage() {
     } catch (error) {
       toast.error('操作失败');
     }
+  };
+
+  // 打开成本配置
+  const handleCostConfig = (model: Model) => {
+    setSelectedModelForCost(model);
+    setShowCostConfig(true);
   };
 
   return (
@@ -551,6 +560,12 @@ export default function ModelsPage() {
                         编辑
                       </button>
                       <button
+                        onClick={() => handleCostConfig(model)}
+                        className="text-green-600 hover:text-green-700 text-sm"
+                      >
+                        成本
+                      </button>
+                      <button
                         onClick={() => handleDelete(model)}
                         className="text-red-600 hover:text-red-700 text-sm"
                       >
@@ -563,6 +578,19 @@ export default function ModelsPage() {
             </tbody>
           </table>
         </div>
+      )}
+      )}
+
+      {/* 成本配置弹窗 */}
+      {showCostConfig && selectedModelForCost && (
+        <CostConfigDialog
+          modelId={selectedModelForCost.id}
+          modelAlias={selectedModelForCost.alias}
+          onClose={() => {
+            setShowCostConfig(false);
+            setSelectedModelForCost(null);
+          }}
+        />
       )}
     </div>
   );
