@@ -317,14 +317,6 @@ func (s *Server) setupRouter() {
 	// 健康检查
 	s.router.GET("/health", s.handleHealth)
 
-	// 静态文件服务（前端）
-	s.router.Static("/assets", "./web/dist/assets")
-	s.router.StaticFile("/favicon.svg", "./web/dist/favicon.svg")
-	s.router.StaticFile("/icons.svg", "./web/dist/icons.svg")
-	s.router.GET("/", func(c *gin.Context) {
-		c.File("./web/dist/index.html")
-	})
-
 	// 测试端点
 	s.router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{

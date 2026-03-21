@@ -35,9 +35,6 @@ WORKDIR /app
 # 从构建阶段复制二进制文件
 COPY --from=builder /build/api2openclaw .
 
-# 从构建阶段复制前端文件
-COPY --from=builder /build/web/dist /app/web/dist
-
 # 创建配置目录
 RUN mkdir -p /app/configs /app/logs
 

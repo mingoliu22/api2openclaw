@@ -61,13 +61,13 @@ services:
       - api2openclaw-network
     restart: unless-stopped
 
-  # 前端开发服务器（可选）
+  # 前端服务
   frontend:
     image: node:20-alpine
     container_name: api2openclaw-frontend
     working_dir: /app
     environment:
-      - VITE_API_BASE_URL=http://localhost:8080/v1
+      - VITE_API_BASE_URL=http://localhost:8080
     ports:
       - "5173:5173"
     volumes:
@@ -79,8 +79,6 @@ services:
     networks:
       - api2openclaw-network
     restart: unless-stopped
-    profiles:
-      - frontend
 
   # pgAdmin（可选，用于数据库管理）
   pgadmin:
