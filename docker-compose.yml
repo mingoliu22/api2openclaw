@@ -66,8 +66,6 @@ services:
     image: node:20-alpine
     container_name: api2openclaw-frontend
     working_dir: /app
-    environment:
-      - VITE_API_BASE_URL=http://localhost:8080
     ports:
       - "5173:5173"
     volumes:
