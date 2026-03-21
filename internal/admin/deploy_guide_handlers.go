@@ -3,7 +3,6 @@ package admin
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -101,7 +100,7 @@ type CreateDeployGuideRequest struct {
 	InstallCmd   string                 `json:"install_cmd"`
 	StartCmd     string                 `json:"start_cmd"`
 	Params       map[string]interface{} `json:"params"`
-	Features     []string               `json:"features"`
+	Features     map[string]interface{} `json:"features"`
 	Requirements map[string]interface{} `json:"requirements"`
 	APIPort      int                    `json:"api_port"`
 	Tagline      string                 `json:"tagline"`
@@ -114,7 +113,7 @@ type CreateDeployGuideRequest struct {
 	VRAMReq      string                 `json:"vram_requirement"`
 	Precision    string                 `json:"precision"`
 	HFID         string                 `json:"hf_id"`
-	Steps        []map[string]interface{} `json:"steps"`
+	Steps        map[string]interface{} `json:"steps"`
 	DisplayOrder int                    `json:"display_order"`
 	IsActive     *bool                  `json:"is_active"`
 }
@@ -180,7 +179,7 @@ type UpdateDeployGuideRequest struct {
 	InstallCmd   *string                 `json:"install_cmd"`
 	StartCmd     *string                 `json:"start_cmd"`
 	Params       map[string]interface{} `json:"params"`
-	Features     []string               `json:"features"`
+	Features     map[string]interface{} `json:"features"`
 	Requirements map[string]interface{} `json:"requirements"`
 	APIPort      *int                    `json:"api_port"`
 	Tagline      *string                 `json:"tagline"`
@@ -193,7 +192,7 @@ type UpdateDeployGuideRequest struct {
 	VRAMReq      *string                 `json:"vram_requirement"`
 	Precision    *string                 `json:"precision"`
 	HFID         *string                 `json:"hf_id"`
-	Steps        []map[string]interface{} `json:"steps"`
+	Steps        map[string]interface{} `json:"steps"`
 	DisplayOrder *int                    `json:"display_order"`
 	IsActive     *bool                   `json:"is_active"`
 }

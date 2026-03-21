@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/liu/api2openclaw/internal/billing"
+	"github.com/openclaw/api2openclaw/internal/billing"
 )
 
 // BillingHandlers 计费处理器
@@ -420,7 +420,7 @@ func (h *BillingHandlers) CreatePayment(c *gin.Context) {
 		InvoiceID:        invoiceID,
 		Amount:           req.Amount,
 		PaymentMethod:    req.PaymentMethod,
-		PaymentReference: &req.PaymentReference,
+		PaymentReference: req.PaymentReference,
 		Status:           "pending",
 		Notes:            req.Notes,
 	}

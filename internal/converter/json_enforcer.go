@@ -128,7 +128,7 @@ func (e *JSONEnforcer) tryParseJSON(s string) (string, error) {
 // extractCodeBlock 从响应中提取 ```json 代码块
 func (e *JSONEnforcer) extractCodeBlock(response string) (string, error) {
 	// 正则匹配 ```json ... ``` 或 ``` ... ```
-	pattern := regexp.MustCompile("```(?:json)?\n?([\s\S]*?)```")
+	pattern := regexp.MustCompile("```(?:json)?\\n?([\\s\\S]*?)```")
 	matches := pattern.FindStringSubmatch(response)
 
 	if len(matches) < 2 {

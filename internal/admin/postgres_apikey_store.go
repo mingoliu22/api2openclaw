@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -82,7 +83,6 @@ func (s *PostgreSQLAPIKeyStore) GetByID(ctx context.Context, id string) (*APIKey
 		&k.ID, &k.Label, &k.KeyHash, &k.KeyPrefix, &k.ModelAlias, &k.ExpiresAt,
 		&k.Status, &k.Note, &k.DailyTokenSoftLimit, &k.DailyTokenHardLimit, &k.Priority,
 		&k.CreatedAt, &k.RevokedAt)
-	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get api key: %w", err)
 	}
@@ -203,7 +203,7 @@ func (s *PostgreSQLAPIKeyStore) Update(ctx context.Context, id string, req *Upda
 	}
 
 	args = append(args, id)
-	query := fmt.Sprintf("UPDATE api_keys SET %s WHERE id = $%d", fmt.Join(updates, ", "), argCount)
+	query := fmt.Sprintf("UPDATE api_keys SET %s WHERE id = $%d", strings.Join(updates, ", "), argCount)
 
 	result, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {

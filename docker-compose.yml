@@ -1,0 +1,119 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:16-alpine
+    container_name: api2openclaw-postgres
+    environment:
+      POSTGRES_DB: api2openclaw
+      POSTGRES_USER: api2openclaw
+      POSTGRES_PASSWORD: api2openclaw123
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U api2openclaw -d api2openclaw"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - api2openclaw-network
+    restart: unless-stopped
+
+  # 后端 API 服务
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api2openclaw-api
+    environment:
+      # 数据库连接（覆盖配置文件）
+      API2OPENCLAW_DB_HOST: postgres
+      API2OPENCLAW_DB_PORT: 5432
+      API2OPENCLAW_DB_USER: api2openclaw
+      API2OPENCLAW_DB_PASSWORD: api2openclaw123
+      API2OPENCLAW_DB_NAME: api2openclaw
+      # JWT 密钥
+      JWT_SECRET: change-this-secret-in-production-please-do
+      # 加密密钥
+      ENCRYPTION_KEY: 32-byte-encryption-key-1234
+    ports:
+      - "8080:8080"   # API 端口
+      - "9090:9090"   # Prometheus 指标端口
+    volumes:
+      - ./configs:/app/configs:ro
+      - api2openclaw_logs:/app/logs
+      - plugin_data:/app/plugins
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - api2openclaw-network
+    restart: unless-stopped
+
+  # 前端开发服务器（可选）
+  frontend:
+    image: node:20-alpine
+    container_name: api2openclaw-frontend
+    working_dir: /app
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8080/v1
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./web:/app
+      - node_modules:/app/node_modules
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - api
+    networks:
+      - api2openclaw-network
+    restart: unless-stopped
+    profiles:
+      - frontend
+
+  # pgAdmin（可选，用于数据库管理）
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: api2openclaw-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@api2openclaw.local
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - api2openclaw-network
+    restart: unless-stopped
+    profiles:
+      - admin
+
+volumes:
+  postgres_data:
+    driver: local
+  api2openclaw_logs:
+    driver: local
+  plugin_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  node_modules:
+    driver: local
+
+networks:
+  api2openclaw-network:
+    driver: bridge

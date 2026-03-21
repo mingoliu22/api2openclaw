@@ -12,7 +12,7 @@ auth:
   enabled: true
   store_type: "postgres"  # postgres | redis | memory
   database:
-    host: "localhost"
+    host: "postgres"
     port: 5432
     user: "api2openclaw"
     password: "api2openclaw123"

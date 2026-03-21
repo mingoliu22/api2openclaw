@@ -54,6 +54,7 @@ type Server struct {
 
 // New 创建服务器
 func New(cfg *config.Config, configPath string) (*Server, error) {
+	log.Printf("[SERVER] Creating new server, auth enabled: %v", cfg.Auth.Enabled)
 	// 初始化认证管理器
 	var authMgr *auth.Manager
 	if cfg.Auth.Enabled {
@@ -180,6 +181,7 @@ func New(cfg *config.Config, configPath string) (*Server, error) {
 	var reloadWatcher *admin.ReloadWatcher
 
 	if cfg.Auth.Enabled {
+		log.Printf("[SERVER] Initializing admin auth (enabled: %v)", cfg.Auth.Enabled)
 		// 构建 PostgreSQL 连接字符串
 		postgresDSN := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 			cfg.Auth.Database.Host,
@@ -189,17 +191,21 @@ func New(cfg *config.Config, configPath string) (*Server, error) {
 			cfg.Auth.Database.Database,
 			cfg.Auth.Database.SSLMode,
 		)
+		log.Printf("[SERVER] Connecting to admin DB: %s", cfg.Auth.Database.Host)
 
 		// 使用 sqlx 创建数据库连接
 		sqlxDB, err := sqlx.Connect("postgres", postgresDSN)
 		if err != nil {
+			log.Printf("[SERVER] Failed to connect to admin DB: %v", err)
 			return nil, fmt.Errorf("failed to connect to admin database: %w", err)
 		}
 		sqlxDB.SetMaxOpenConns(25)
 		sqlxDB.SetMaxIdleConns(5)
+		log.Printf("[SERVER] Connected to admin DB successfully")
 
 		// 创建管理员存储
 		adminStore := admin.NewPostgreSQLStore(sqlxDB)
+		log.Printf("[SERVER] Created PostgreSQL admin store: %T", adminStore)
 
 		// 创建模型和 API Key 存储
 		modelStore := admin.NewPostgreSQLModelStore(sqlxDB)
@@ -219,6 +225,7 @@ func New(cfg *config.Config, configPath string) (*Server, error) {
 
 		// 创建 API 处理器
 		adminAPIHandlers = admin.NewAPIHandlers(adminAuthService, adminModelService, adminAPIKeyService, requestLogStore)
+		log.Printf("[SERVER] Created admin API handlers")
 
 		// 初始化插件管理器
 		pluginManager := converter.NewPluginManager()
@@ -310,6 +317,22 @@ func (s *Server) setupRouter() {
 	// 健康检查
 	s.router.GET("/health", s.handleHealth)
 
+	// 静态文件服务（前端）
+	s.router.Static("/assets", "./web/dist/assets")
+	s.router.StaticFile("/favicon.svg", "./web/dist/favicon.svg")
+	s.router.StaticFile("/icons.svg", "./web/dist/icons.svg")
+	s.router.GET("/", func(c *gin.Context) {
+		c.File("./web/dist/index.html")
+	})
+
+	// 测试端点
+	s.router.GET("/test", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Server is working",
+			"auth_enabled": s.config.Auth.Enabled,
+		})
+	})
+
 	// Prometheus 指标
 	if s.config.Monitor.Prometheus.Enabled && s.promMetrics != nil {
 		s.router.GET(s.config.Monitor.Prometheus.MetricsPath, gin.WrapH(s.promMetrics.Handler()))
@@ -375,9 +398,14 @@ func (s *Server) setupRouter() {
 
 			// JWT 认证的管理接口（新版控制台 API）
 			if s.adminAPIHandlers != nil {
-				s.adminAPIHandlers.RegisterRoutes(&s.router.RouterGroup)
+				log.Printf("[SERVER] Registering admin API handlers")
+				s.adminAPIHandlers.RegisterRoutes(s.router.Group(""))
+			} else {
+				log.Printf("[SERVER] adminAPIHandlers is nil!")
 			}
-		}
+		} else {
+		log.Printf("[SERVER] Auth is disabled or authMgr is nil")
+	}
 	}
 }
 
@@ -776,9 +804,6 @@ func (s *Server) handleChatCompletionsStream(c *gin.Context) {
 	chunkChan, errChan := s.forwarder.ForwardStreamRequest(c.Request.Context(), backend, &req, apiKey.ID)
 
 	// 发送流式数据
-	requestSucceeded := false
-	var streamErr error
-
 	for {
 		select {
 		case <-c.Request.Context().Done():
@@ -803,7 +828,6 @@ func (s *Server) handleChatCompletionsStream(c *gin.Context) {
 		case chunk, ok := <-chunkChan:
 			if !ok {
 				// 流式传输完成
-				requestSucceeded = true
 				// 发送完成信号
 				fmt.Fprintf(c.Writer, "data: [DONE]\n\n")
 				flusher.Flush()
@@ -853,7 +877,6 @@ func (s *Server) handleChatCompletionsStream(c *gin.Context) {
 
 		case err := <-errChan:
 			if err != nil {
-				streamErr = err
 				log.Printf("[Chat Stream] Error: %v", err)
 
 				// 记录失败的流式请求日志
@@ -1565,7 +1588,7 @@ func (s *Server) logRequestAsync(apiKeyID, modelAlias, modelActual string, promp
 		}
 
 		if err := s.requestLogStore.Create(ctx, log); err != nil {
-			log.Printf("[Server] Failed to log request: %v", err)
+			// Log storage failure
 		}
 	}()
 }

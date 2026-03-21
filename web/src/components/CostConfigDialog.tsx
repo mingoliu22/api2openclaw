@@ -1,5 +1,5 @@
 import { useState, useEffect, type FormEvent } from 'react';
-import { costAPI, modelsAPI } from '../services/api';
+import { costAPI } from '../services/api';
 import { useToast } from './Toast';
 
 interface CostConfig {
@@ -289,7 +289,6 @@ export default function CostConfigDialog({ modelId, modelAlias, onClose }: CostC
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     min="1"
                     max="3"
-                    step="0.01"
                     required
                   />
                   <p className="text-xs text-gray-500 mt-1">数据中心电力使用效率，典型值 1.2~1.5</p>

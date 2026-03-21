@@ -46,8 +46,8 @@ type MultimodalMessage struct {
 	ToolID  string             // 工具调用 ID
 }
 
-// OpenAIMessage OpenAI 格式消息（支持多模态）
-type OpenAIMessage struct {
+// OpenAIMultimodalMessage OpenAI 多模态格式消息
+type OpenAIMultimodalMessage struct {
 	Role       string        `json:"role"`
 	Content    interface{}   `json:"content"` // string 或 []ContentPart
 	Name       string        `json:"name,omitempty"`
@@ -92,9 +92,9 @@ func NewMultimodalParser() *MultimodalParser {
 	}
 }
 
-// ParseOpenAIMessage 解析 OpenAI 格式消息
-func (p *MultimodalParser) ParseOpenAIMessage(data []byte) (*MultimodalMessage, error) {
-	var msg OpenAIMessage
+// ParseOpenAIMultimodalMessage 解析 OpenAI 格式消息
+func (p *MultimodalParser) ParseOpenAIMultimodalMessage(data []byte) (*MultimodalMessage, error) {
+	var msg OpenAIMultimodalMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
 		return nil, fmt.Errorf("unmarshal openai message: %w", err)
 	}
@@ -149,7 +149,7 @@ func (p *MultimodalParser) parseContentParts(parts []interface{}) ([]MultimodalC
 		case "image_url":
 			if imageURL, ok := partMap["image_url"].(map[string]interface{}); ok {
 				urlStr, _ := imageURL["url"].(string)
-				detail, _ := imageURL["detail"].(string)
+				_, _ = imageURL["detail"].(string) // Reserved for future use
 
 				content := MultimodalContent{
 					Type:      "image_url",
@@ -310,7 +310,7 @@ func (p *MultimodalParser) Validate(msg *MultimodalMessage) error {
 	for _, content := range msg.Content {
 		switch content.Type {
 		case "image_url":
-			if content.ImageBase64 && len(content.ImageData) > p.MaxImageSize {
+			if content.ImageBase64 && int64(len(content.ImageData)) > p.MaxImageSize {
 				return fmt.Errorf("image size %d exceeds limit %d", len(content.ImageData), p.MaxImageSize)
 			}
 			if content.ImageMIME != "" && !p.isAllowedMIME(content.ImageMIME) {
@@ -318,7 +318,7 @@ func (p *MultimodalParser) Validate(msg *MultimodalMessage) error {
 			}
 
 		case "audio_url":
-			if content.AudioBase64 && len(content.AudioData) > p.MaxAudioSize {
+			if content.AudioBase64 && int64(len(content.AudioData)) > p.MaxAudioSize {
 				return fmt.Errorf("audio size %d exceeds limit %d", len(content.AudioData), p.MaxAudioSize)
 			}
 			if content.AudioMIME != "" && !p.isAllowedMIME(content.AudioMIME) {
@@ -347,7 +347,6 @@ func (p *MultimodalParser) MergeTextContents(msg *MultimodalMessage) {
 
 		// 收集连续的文本
 		var textBuilder strings.Builder
-		startIdx := i
 		for i < len(msg.Content) && msg.Content[i].Type == "text" {
 			textBuilder.WriteString(msg.Content[i].Text)
 			i++
@@ -454,7 +453,7 @@ type MultimodalStreamChunk struct {
 func (p *MultimodalParser) ParseMultimodalStreamChunk(data []byte) (*MultimodalStreamChunk, error) {
 	var chunk struct {
 		Choices []struct {
-			Delta  *OpenAIMessage `json:"delta"`
+			Delta  *OpenAIMultimodalMessage `json:"delta"`
 			Finish string         `json:"finish_reason"`
 		} `json:"choices"`
 	}
@@ -475,7 +474,7 @@ func (p *MultimodalParser) ParseMultimodalStreamChunk(data []byte) (*MultimodalS
 	if choice.Delta != nil {
 		// 转换为多模态消息格式
 		deltaData, _ := json.Marshal(choice.Delta)
-		msg, err := p.ParseOpenAIMessage(deltaData)
+		msg, err := p.ParseOpenAIMultimodalMessage(deltaData)
 		if err == nil {
 			result.Delta = msg
 		}
@@ -603,7 +602,7 @@ func (c *MultimodalConverter) isMultimodalResponse(data []byte) bool {
 func (c *MultimodalConverter) convertMultimodal(data []byte) ([]byte, error) {
 	var resp struct {
 		Choices []struct {
-			Message OpenAIMessage `json:"message"`
+			Message OpenAIMultimodalMessage `json:"message"`
 		} `json:"choices"`
 		Usage struct {
 			PromptTokens     int `json:"prompt_tokens"`
@@ -621,7 +620,7 @@ func (c *MultimodalConverter) convertMultimodal(data []byte) ([]byte, error) {
 	}
 
 	// 解析多模态消息
-	msg, err := c.parser.ParseOpenAIMessageMessage(&resp.Choices[0].Message)
+	msg, err := c.parser.ParseOpenAIMultimodalMessageMessage(&resp.Choices[0].Message)
 	if err != nil {
 		return nil, err
 	}
@@ -682,8 +681,8 @@ func (c *MultimodalConverter) convertMultimodalStream(r io.Reader, w io.Writer) 
 	return nil
 }
 
-// ParseOpenAIMessageMessage 辅助方法：从 OpenAIMessage 解析多模态消息
-func (p *MultimodalParser) ParseOpenAIMessageMessage(msg *OpenAIMessage) (*MultimodalMessage, error) {
+// ParseOpenAIMultimodalMessageMessage 辅助方法：从 OpenAIMultimodalMessage 解析多模态消息
+func (p *MultimodalParser) ParseOpenAIMultimodalMessageMessage(msg *OpenAIMultimodalMessage) (*MultimodalMessage, error) {
 	result := &MultimodalMessage{
 		Role:   msg.Role,
 		Name:   msg.Name,

@@ -44,10 +44,8 @@ func (h *StreamHandler) HandleStream(
 		return fmt.Errorf("streaming not supported: http.Flusher not available")
 	}
 
-	// 记录首 token 时间
+	// 记录首 token 状态
 	firstTokenReceived := false
-	var firstTokenLatency time.Duration
-	startTime := time.Now()
 
 	// 逐 chunk 处理
 	for {
@@ -86,7 +84,6 @@ func (h *StreamHandler) HandleStream(
 			if !firstTokenReceived && len(normalized.Choices) > 0 {
 				if normalized.Choices[0].Delta.Content != "" {
 					firstTokenReceived = true
-					firstTokenLatency = time.Since(startTime)
 				}
 			}
 
@@ -278,7 +275,7 @@ func (r *sseReader) NextChunk() ([]byte, error) {
 		}
 
 		line = trimSpace(line)
-		if line == "" || hasPrefix(line, ":") {
+		if len(line) == 0 || hasPrefix(line, ":") {
 			// 跳过空行和注释
 			continue
 		}
@@ -307,7 +304,7 @@ func (r *bufioReader) readLine() ([]byte, error) {
 	line := make([]byte, 0, 256)
 	for {
 		if r.pos >= len(r.buf) {
-			n, err := r.r.Read(r.buf)
+			_, err := r.r.Read(r.buf)
 			if err != nil {
 				if err == io.EOF && len(line) > 0 {
 					return line, nil

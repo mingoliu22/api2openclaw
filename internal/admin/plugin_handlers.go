@@ -2,8 +2,8 @@ package admin
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -173,13 +173,6 @@ func (h *PluginHandlers) EnablePlugin(c *gin.Context) {
 	// 当前简化实现：直接加载内置插件
 
 	if name == "deepseek" || name == "openai" || name == "openclaw" {
-		config := &converter.PluginConfig{
-			Name:    name,
-			Type:    "builtin",
-			Enabled: true,
-			Config:  req.Config,
-		}
-
 		if err := h.pluginManager.GetRegistry().Register(
 			converter.NewBuiltinDeepSeekPlugin(),
 			req.Config,
@@ -214,7 +207,7 @@ func (h *PluginHandlers) DisablePlugin(c *gin.Context) {
 
 // UpdatePluginConfig 更新插件配置
 func (h *PluginHandlers) UpdatePluginConfig(c *gin.Context) {
-	name := c.Param("name")
+	_ = c.Param("name") // Reserved for future use
 
 	var req struct {
 		Config map[string]interface{} `json:"config"`
@@ -346,7 +339,7 @@ func (h *PluginHandlers) ListBuiltinPlugins(c *gin.Context) {
 }
 
 // SaveUploadedFile 保存上传的文件（辅助方法）
-func (h *PluginHandlers) SaveUploadedFile(file *gin.Context.FileHeader, dest string) error {
+func (h *PluginHandlers) SaveUploadedFile(file *multipart.FileHeader, dest string) error {
 	src, err := file.Open()
 	if err != nil {
 		return err

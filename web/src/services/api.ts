@@ -24,7 +24,8 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // 只在非登录页面时才重定向
+    if (error.response?.status === 401 && window.location.pathname !== '/') {
       // 未授权，跳转到登录页
       window.location.href = '/';
     }

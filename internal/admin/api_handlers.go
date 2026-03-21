@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"encoding/csv"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // APIHandlers 管理 API 处理器
@@ -74,6 +76,62 @@ func (h *APIHandlers) notifyModelChanged() {
 
 // RegisterRoutes 注册路由
 func (h *APIHandlers) RegisterRoutes(r *gin.RouterGroup) {
+	// 重置管理员密码端点（临时调试用）
+	r.POST("/admin/reset-password", func(c *gin.Context) {
+		var req struct {
+			NewPassword string `json:"new_password" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// 生成新的密码hash
+		hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
+			return
+		}
+
+		// 更新admin用户密码
+		ctx := c.Request.Context()
+		user, err := h.authService.store.FindByUsername(ctx, "admin")
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Admin user not found"})
+			return
+		}
+
+		user.PasswordHash = string(hash)
+		if err := h.authService.store.Update(ctx, user); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully"})
+	})
+
+	// 测试端点 - 直接返回用户信息
+	r.GET("/admin/test-user", func(c *gin.Context) {
+		users, _, err := h.authService.store.List(context.Background(), 10, 0)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"count": len(users),
+			"users": users,
+		})
+	})
+
+	// 调试端点
+	r.GET("/admin/debug", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Admin routes are working",
+			"auth_handler_exists": h.authHandler != nil,
+			"auth_service_exists": h.authService != nil,
+		})
+	})
+
 	// 认证相关（无需 JWT）
 	auth := r.Group("/admin/auth")
 	{

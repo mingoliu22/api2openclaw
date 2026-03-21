@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -94,7 +95,7 @@ type AdminUser struct {
 	ID                 string     `json:"id" db:"id"`
 	Username           string     `json:"username" db:"username"`
 	PasswordHash       string     `json:"-" db:"password_hash"`
-	Email              string     `json:"email,omitempty" db:"email"`
+	Email              *string    `json:"email,omitempty" db:"email"`
 	Role               UserRole   `json:"role" db:"role"`
 	IsActive           bool       `json:"is_active" db:"is_active"`
 	CreatedBy          *string    `json:"created_by,omitempty" db:"created_by"`
@@ -279,6 +280,7 @@ type UpdateUserRequest struct {
 
 // NewAdminAuthService 创建管理员认证服务
 func NewAdminAuthService(store AdminUserStore, jwtSecret string) *AdminAuthService {
+	log.Printf("[AUTH_SERVICE] Creating AdminAuthService with store type: %T", store)
 	return &AdminAuthService{
 		store:           store,
 		jwtManager:      NewJWTManager(jwtSecret, 8*time.Hour),
@@ -309,6 +311,7 @@ func (s *AdminAuthService) Login(ctx context.Context, username, password, ipAddr
 	// 查找用户
 	user, err := s.store.FindByUsername(ctx, username)
 	if err != nil {
+		log.Printf("[LOGIN] FindByUsername failed for %s: %v", username, err)
 		// 记录失败尝试
 		s.store.RecordLoginAttempt(ctx, &LoginAttempt{
 			IPAddress: ipAddress,
@@ -318,13 +321,18 @@ func (s *AdminAuthService) Login(ctx context.Context, username, password, ipAddr
 		return "", time.Time{}, ErrInvalidCredentials
 	}
 
+	log.Printf("[LOGIN] User found: %s, hash length: %d", user.Username, len(user.PasswordHash))
+
 	// 检查用户是否被锁定
 	if user.IsLocked() {
+		log.Printf("[LOGIN] User %s is locked until %v", username, user.LockedUntil)
 		return "", time.Time{}, ErrUserLocked
 	}
 
 	// 验证密码
+	log.Printf("[LOGIN] Comparing password hash for %s (input length: %d)", username, len(password))
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		log.Printf("[LOGIN] Password comparison failed: %v", err)
 		// 密码错误，增加失败计数
 		user.FailedLoginAttempts++
 		if user.FailedLoginAttempts >= s.maxAttempts {
@@ -416,11 +424,16 @@ func (s *AdminAuthService) CreateUser(ctx context.Context, req *CreateUserReques
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
+	var emailPtr *string
+	if req.Email != "" {
+		emailPtr = &req.Email
+	}
+
 	user := &AdminUser{
 		ID:           generateUUID(),
 		Username:     req.Username,
 		PasswordHash: passwordHash,
-		Email:        req.Email,
+		Email:        emailPtr,
 		Role:         req.Role,
 		IsActive:     true,
 		CreatedBy:    &createdBy,
@@ -452,7 +465,7 @@ func (s *AdminAuthService) UpdateUser(ctx context.Context, id string, req *Updat
 
 	// 更新字段
 	if req.Email != nil {
-		user.Email = *req.Email
+		user.Email = req.Email
 	}
 	if req.Role != nil {
 		if !IsValidRole(*req.Role) {

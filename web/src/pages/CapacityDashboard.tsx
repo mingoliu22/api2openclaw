@@ -45,7 +45,7 @@ export default function CapacityDashboard() {
   const [costSummary, setCostSummary] = useState<CostSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingRef = useRef<number | null>(null);
 
   // 获取数据
   const fetchData = async () => {

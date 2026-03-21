@@ -579,7 +579,6 @@ export default function ModelsPage() {
           </table>
         </div>
       )}
-      )}
 
       {/* 成本配置弹窗 */}
       {showCostConfig && selectedModelForCost && (

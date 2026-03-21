@@ -7,7 +7,7 @@ interface CodeBlockProps {
   showCopy?: boolean;
 }
 
-export default function CodeBlock({ code, language = 'bash', title, showCopy = true }: CodeBlockProps) {
+export default function CodeBlock({ code, language: _language = 'bash', title, showCopy = true }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {

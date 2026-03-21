@@ -1,6 +1,8 @@
 package admin
 
 import (
+	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -66,8 +68,10 @@ func (h *Handler) LoginHandler(c *gin.Context) {
 	}
 
 	// 调用登录服务
+	log.Printf("[LOGIN] Attempting login for user: %s from IP: %s", req.Username, ipAddress)
 	token, expiresAt, err := h.authService.Login(c.Request.Context(), req.Username, req.Password, ipAddress)
 	if err != nil {
+		log.Printf("[LOGIN] Login failed for user %s: %v", req.Username, err)
 		code := "invalid_credentials"
 		message := "用户名或密码错误"
 		statusCode := http.StatusUnauthorized

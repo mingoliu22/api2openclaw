@@ -45,7 +45,7 @@ func (s *QuotaStoreImpl) CheckAndIncrement(ctx context.Context, keyID string, to
 		HardExceededCount int        `db:"hard_exceeded_count"`
 	}
 
-	_, err = s.db.QueryContext(ctx, `
+	err = s.db.QueryRowContext(ctx, `
 		SELECT increment_quota_usage($1, $2, $3, $4)
 	`, keyID, tokens, softLimit, hardLimit).Scan(
 		&result.TokensUsed,

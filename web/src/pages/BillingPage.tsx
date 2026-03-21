@@ -18,8 +18,6 @@ export default function BillingPage() {
   const [invoicesTotal, setInvoicesTotal] = useState(0);
   const [invoicesPage, setInvoicesPage] = useState(1);
   const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
-  const [loading, setLoading] = useState(false);
-
   // 规则表单状态
   const [showRuleForm, setShowRuleForm] = useState(false);
   const [editingRule, setEditingRule] = useState<BillingRule | null>(null);
@@ -65,15 +63,12 @@ export default function BillingPage() {
   };
 
   const loadInvoices = async () => {
-    setLoading(true);
     try {
       const res = await billingAPI.listInvoices({ page: invoicesPage, limit: 20 });
       setInvoices(res.data.invoices || []);
       setInvoicesTotal(res.data.total || 0);
     } catch (error) {
       console.error('Failed to load invoices:', error);
-    } finally {
-      setLoading(false);
     }
   };
 

@@ -8,17 +8,53 @@ import (
 
 // === 导出的标准类型 ===
 
-// OpenAIResponse 标准 OpenAI 响应（导出供外部使用）
-type OpenAIResponse = openAIResponse
+// OpenAIMessage OpenAI 消息格式
+type OpenAIMessage struct {
+	Role       string       `json:"role"`
+	Content    string       `json:"content,omitempty"`
+	ToolCalls  []ToolCall   `json:"tool_calls,omitempty"`
+	ToolCallID string       `json:"tool_call_id,omitempty"` // 用于工具结果
+}
 
-// OpenAIStreamChunk OpenAI 流式 chunk（导出供外部使用）
-type OpenAIStreamChunk = openAIStreamChunk
+// OpenAIResponse 标准 OpenAI 响应
+type OpenAIResponse struct {
+	ID      string         `json:"id"`
+	Object  string         `json:"object"`
+	Created int64          `json:"created"`
+	Model   string         `json:"model"`
+	Choices []OpenAIChoice `json:"choices"`
+	Usage   *OpenAIUsage   `json:"usage,omitempty"`
+}
+
+// OpenAIStreamChunk OpenAI 流式 chunk
+type OpenAIStreamChunk struct {
+	ID      string              `json:"id"`
+	Object  string              `json:"object"`
+	Created int64               `json:"created"`
+	Model   string              `json:"model"`
+	Choices []OpenAIStreamChoice `json:"choices"`
+}
+
+// OpenAIStreamChoice OpenAI 流式选择
+type OpenAIStreamChoice struct {
+	Index        int            `json:"index"`
+	Delta        OpenAIMessage  `json:"delta"`
+	FinishReason *string        `json:"finish_reason"`
+}
 
 // OpenAIChoice OpenAI 选择
-type OpenAIChoice = openAIChoice
+type OpenAIChoice struct {
+	Index        int           `json:"index"`
+	Message      OpenAIMessage `json:"message"`
+	FinishReason string        `json:"finish_reason"`
+}
 
 // OpenAIUsage OpenAI 使用量
-type OpenAIUsage = openAIUsage
+type OpenAIUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+}
 
 // === 内部类型定义 ===
 
@@ -97,26 +133,6 @@ func NewConverter(config *ConverterConfig) (Converter, error) {
 	default:
 		return NewDeepSeekConverter(config), nil // 默认使用 DeepSeek
 	}
-}
-
-// NewNormalizer 创建归一化器
-func NewNormalizerV1(config *ConverterConfig) Normalizer {
-	return &normalizerAdapter{config: config}
-}
-
-// normalizerAdapter 归一化器适配器
-type normalizerAdapter struct {
-	config *ConverterConfig
-}
-
-func (a *normalizerAdapter) Normalize(raw []byte, modelFamily ModelFamily) (*OpenAIResponse, error) {
-	n := NewNormalizer(a.config)
-	return n.Normalize(raw, modelFamily)
-}
-
-func (a *normalizerAdapter) NormalizeStreamChunk(raw []byte, modelFamily ModelFamily) (*OpenAIStreamChunk, error) {
-	n := NewNormalizer(a.config)
-	return n.NormalizeStreamChunk(raw, modelFamily)
 }
 
 // DeepSeekConverter DeepSeek 转换器

@@ -11,11 +11,11 @@ import (
 
 // QuotaMiddleware 配额检查中间件
 type QuotaMiddleware struct {
-	store *QuotaStore
+	store QuotaStore
 }
 
 // NewQuotaMiddleware 创建配额中间件
-func NewQuotaMiddleware(store *QuotaStore) *QuotaMiddleware {
+func NewQuotaMiddleware(store QuotaStore) *QuotaMiddleware {
 	return &QuotaMiddleware{store: store}
 }
 
@@ -106,7 +106,7 @@ func (m *QuotaMiddleware) quotaExceededError(c *gin.Context, status *QuotaStatus
 
 	// 设置响应头
 	c.Header("Content-Type", "application/json")
-	c.Header("Retry-After", fmt.Sprintf("%d", int(time.Until(resetAt.Sub(time.Now()).Seconds())))
+	c.Header("Retry-After", fmt.Sprintf("%d", int(time.Until(resetAt).Seconds())))
 
 	// 返回 429 响应
 	c.JSON(http.StatusTooManyRequests, gin.H{
@@ -114,12 +114,12 @@ func (m *QuotaMiddleware) quotaExceededError(c *gin.Context, status *QuotaStatus
 			"code":    "quota_exceeded",
 			"message": "今日 token 配额已用完",
 			"details": gin.H{
-				"quota_type":      "daily_tokens",
-				"limit":           status.HardLimit,
-				"used":             status.TokensUsed,
-				"reset_at":         resetAt.Format(time.RFC3339),
-				"retry_after_seconds": int(time.Until(resetAt.Sub(time.Now()).Seconds()),
-				"suggestion":       "请联系管理员提升配额，或等待明日 00:00 重置",
+				"quota_type":        "daily_tokens",
+				"limit":             status.HardLimit,
+				"used":              status.TokensUsed,
+				"reset_at":          resetAt.Format(time.RFC3339),
+				"retry_after_seconds": int(time.Until(resetAt).Seconds()),
+				"suggestion":        "请联系管理员提升配额，或等待明日 00:00 重置",
 			},
 		},
 	})

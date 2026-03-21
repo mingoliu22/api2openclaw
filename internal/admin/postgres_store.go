@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -19,6 +20,8 @@ func NewPostgreSQLStore(db *sqlx.DB) *PostgreSQLStore {
 
 // FindByUsername 根据用户名查找用户
 func (s *PostgreSQLStore) FindByUsername(ctx context.Context, username string) (*AdminUser, error) {
+	log.Printf("[POSTGRES_STORE] Looking up user: %s", username)
+
 	var user AdminUser
 	query := `
 		SELECT id, username, password_hash, email, role, is_active, created_by,
@@ -29,9 +32,11 @@ func (s *PostgreSQLStore) FindByUsername(ctx context.Context, username string) (
 
 	err := s.db.GetContext(ctx, &user, query, username)
 	if err != nil {
+		log.Printf("[POSTGRES_STORE] User lookup failed for %s: %v", username, err)
 		return nil, err
 	}
 
+	log.Printf("[POSTGRES_STORE] User found: %s, hash length: %d, is_active: %v", user.Username, len(user.PasswordHash), user.IsActive)
 	return &user, nil
 }
 
@@ -112,18 +117,20 @@ func (s *PostgreSQLStore) Create(ctx context.Context, user *AdminUser) error {
 func (s *PostgreSQLStore) Update(ctx context.Context, user *AdminUser) error {
 	query := `
 		UPDATE admin_users
-		SET email = $2,
-		    role = $3,
-		    is_active = $4,
-		    last_login_at = $5,
-		    failed_login_attempts = $6,
-		    locked_until = $7,
+		SET password_hash = $2,
+		    email = $3,
+		    role = $4,
+		    is_active = $5,
+		    last_login_at = $6,
+		    failed_login_attempts = $7,
+		    locked_until = $8,
 		    updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1
 	`
 
 	_, err := s.db.ExecContext(ctx, query,
 		user.ID,
+		user.PasswordHash,
 		user.Email,
 		user.Role,
 		user.IsActive,

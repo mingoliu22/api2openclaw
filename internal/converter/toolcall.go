@@ -27,32 +27,6 @@ type ToolCallResult struct {
 	Content    string `json:"content"`
 }
 
-// --- OpenAI 格式 ---
-
-// OpenAIMessage OpenAI 消息格式
-type OpenAIMessage struct {
-	Role       string       `json:"role"`
-	Content    string       `json:"content,omitempty"`
-	ToolCalls  []ToolCall   `json:"tool_calls,omitempty"`
-	ToolCallID string       `json:"tool_call_id,omitempty"` // 用于工具结果
-}
-
-// OpenAIResponse OpenAI 响应格式
-type OpenAIResponse struct {
-	ID      string          `json:"id"`
-	Object  string          `json:"object"`
-	Created int64           `json:"created"`
-	Model   string          `json:"model"`
-	Choices []OpenAIChoice  `json:"choices"`
-}
-
-// OpenAIChoice OpenAI 选择
-type OpenAIChoice struct {
-	Index        int           `json:"index"`
-	Message      OpenAIMessage `json:"message"`
-	FinishReason string        `json:"finish_reason"`
-}
-
 // --- DeepSeek 格式 ---
 
 // DeepSeekToolUse DeepSeek 工具使用格式
